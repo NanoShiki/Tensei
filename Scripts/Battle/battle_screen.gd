@@ -212,7 +212,7 @@ func _refresh() -> void:
 func _clear(node: Node) -> void:
 	for child in node.get_children():
 		node.remove_child(child)
-		child.free()
+		child.queue_free()
 
 
 func _refresh_timeline() -> void:

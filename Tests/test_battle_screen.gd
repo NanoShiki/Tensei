@@ -19,6 +19,14 @@ func _run() -> void:
 	_check(screen.log_label != null, "战斗日志应已构建")
 	_check(screen.resource_box.get_child_count() > 0, "资源区应已构建")
 
+	var guard_button := _find_card_button(screen, "防御")
+	_check(guard_button != null, "应能找到防御卡按钮")
+	if guard_button != null:
+		guard_button.pressed.emit()
+		await process_frame
+		_check(is_instance_valid(screen) and screen.battle.outcome == "ongoing", "点击防御后界面应继续可用")
+		_check(screen.card_grid.get_child_count() == 8, "点击防御后卡牌区应重建完成")
+
 	var lorn: RefCounted = screen.battle.allies[0]
 	var start_hp: int = lorn.hp
 	var start_log: String = screen.log_label.text
@@ -74,6 +82,13 @@ func _auto_play(screen, limit: int) -> void:
 		if not played:
 			break
 		steps += 1
+
+
+func _find_card_button(screen, card_name: String) -> Button:
+	for child in screen.card_grid.get_children():
+		if child is Button and str(child.text).begins_with(card_name):
+			return child
+	return null
 
 
 func _first_alive(units: Array) -> RefCounted:
