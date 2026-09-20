@@ -15,6 +15,10 @@ run/main_scene="res://Scenes/UI/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
+[autoload]
+
+GameFlow="*res://Scripts/Core/game_flow.gd"
+
 [display]
 
 window/size/viewport_width=1280

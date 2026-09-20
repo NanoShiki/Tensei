@@ -184,9 +184,16 @@ func _open_character() -> void:
 	content.add_child(_label("洛恩 · 见习剑士", 23))
 	var description := _label("红发、热心，带着一把练习木剑长大。\n他的冒险即将开始。", 18)
 	content.add_child(description)
-	content.add_child(_label("角色创建与旅程入口将在后续开放。", 15, Color(PAPER, 0.6)))
+	content.add_child(_label("从这里进入一场横版卡牌战斗原型。", 15, Color(PAPER, 0.6)))
 	new_game_requested.emit("lorn")
+	_button("进入战斗    →", _start_battle, content)
 	_button("返回", _close_modal, content).grab_focus()
+
+
+func _start_battle() -> void:
+	var flow := get_node_or_null("/root/GameFlow")
+	if flow != null:
+		flow.start_battle("lorn")
 
 
 func _open_settings() -> void:
