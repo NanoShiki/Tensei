@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cf44m8est466t"
-path="res://.godot/imported/07-俯视行走.png-f5f606f9f1d760c6ecd0a7fcf152573d.ctex"
+path="res://.godot/imported/07-俯视行走.png-bae8c973d4ba806db6feeeacd9469f6d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Docs/人物/洛恩/素材/07-俯视行走.png"
-dest_files=["res://.godot/imported/07-俯视行走.png-f5f606f9f1d760c6ecd0a7fcf152573d.ctex"]
+source_file="res://Assets/Characters/Lorn/07-俯视行走.png"
+dest_files=["res://.godot/imported/07-俯视行走.png-bae8c973d4ba806db6feeeacd9469f6d.ctex"]
 
 [params]
 

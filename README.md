@@ -8,7 +8,7 @@
 2. 克隆仓库：`git clone https://github.com/NanoShiki/Tensei.git`。
 3. 在 Godot 项目管理器中导入 `project.godot`，等待资源导入完成。
 
-项目目前为初始骨架，尚未设置可运行的主场景。
+启动后进入主菜单，「开始旅程 → 进入世界」以预设角色洛恩进入城市庭院，使用 WASD 或方向键移动，按住 Shift 疾跑，Esc 返回主菜单。
 
 设计与开发说明见 [项目文档导航](Docs/文档导航.md)，参与记录见 [项目贡献者](Docs/项目规范/项目贡献者.md)。
 

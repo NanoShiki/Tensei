@@ -16,6 +16,11 @@ func _run() -> void:
 	await process_frame
 	assert(is_instance_valid(menu.modal))
 	assert(menu.start_button.focus_mode == Control.FOCUS_NONE)
+	var entry_labels := []
+	for node in menu.modal.get_child(0).get_children():
+		if node is Button:
+			entry_labels.append(node.text)
+	assert(entry_labels.any(func(text): return text.begins_with("进入世界")))
 	menu._close_modal()
 	await process_frame
 	assert(menu.start_button.has_focus())

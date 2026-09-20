@@ -184,9 +184,18 @@ func _open_character() -> void:
 	content.add_child(_label("洛恩 · 见习剑士", 23))
 	var description := _label("红发、热心，带着一把练习木剑长大。\n他的冒险即将开始。", 18)
 	content.add_child(description)
-	content.add_child(_label("角色创建与旅程入口将在后续开放。", 15, Color(PAPER, 0.6)))
-	new_game_requested.emit("lorn")
-	_button("返回", _close_modal, content).grab_focus()
+	content.add_child(_label("角色创建流程待实现，当前直接以洛恩开始旅程。", 15, Color(PAPER, 0.6)))
+	_button("进入世界    →", _start_journey.bind("lorn"), content).grab_focus()
+	_button("返回", _close_modal, content)
+
+
+func _start_journey(character_id: String) -> void:
+	new_game_requested.emit(character_id)
+	var flow := get_node_or_null("/root/GameFlow")
+	if flow == null:
+		push_error("场景流程单例缺失，无法进入世界")
+		return
+	flow.start_new_game(character_id)
 
 
 func _open_settings() -> void:

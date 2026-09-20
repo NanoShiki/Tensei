@@ -1,0 +1,65 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://Scripts/World/world_map.gd" id="1_map"]
+[ext_resource type="Texture2D" path="res://Assets/Maps/CityCourtyard/城市庭院地图.png" id="2_ground"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_north"]
+size = Vector2(2048, 660)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_south"]
+size = Vector2(2048, 508)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_west"]
+size = Vector2(430, 880)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_east"]
+size = Vector2(358, 880)
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_well"]
+radius = 95.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_dummy"]
+radius = 55.0
+
+[node name="CityCourtyard" type="Node2D"]
+script = ExtResource("1_map")
+
+[node name="Ground" type="Sprite2D" parent="."]
+texture_filter = 1
+centered = false
+scale = Vector2(2, 2)
+texture = ExtResource("2_ground")
+
+[node name="Entities" type="Node2D" parent="."]
+y_sort_enabled = true
+
+[node name="Obstacles" type="StaticBody2D" parent="."]
+
+[node name="WallNorth" type="CollisionShape2D" parent="Obstacles"]
+position = Vector2(1024, 330)
+shape = SubResource("RectangleShape2D_north")
+
+[node name="WallSouth" type="CollisionShape2D" parent="Obstacles"]
+position = Vector2(1024, 1794)
+shape = SubResource("RectangleShape2D_south")
+
+[node name="WallWest" type="CollisionShape2D" parent="Obstacles"]
+position = Vector2(215, 1100)
+shape = SubResource("RectangleShape2D_west")
+
+[node name="WallEast" type="CollisionShape2D" parent="Obstacles"]
+position = Vector2(1869, 1100)
+shape = SubResource("RectangleShape2D_east")
+
+[node name="Well" type="CollisionShape2D" parent="Obstacles"]
+position = Vector2(505, 1050)
+shape = SubResource("CircleShape2D_well")
+
+[node name="TrainingDummy" type="CollisionShape2D" parent="Obstacles"]
+position = Vector2(1470, 1130)
+shape = SubResource("CircleShape2D_dummy")
+
+[node name="Markers" type="Node2D" parent="."]
+
+[node name="PlayerSpawn" type="Marker2D" parent="Markers"]
+position = Vector2(1060, 1430)

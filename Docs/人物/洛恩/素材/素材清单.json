@@ -2,6 +2,7 @@
   "character": "洛恩",
   "package": "视觉参考包V2-俯视动作重制中",
   "runtime_ready": false,
+  "runtime_directory": "Assets/Characters/Lorn/",
   "assets": [
     {
       "file": "01-人物设计稿.png",
@@ -60,6 +61,7 @@
     },
     {
       "file": "07-俯视行走.png",
+      "path": "Assets/Characters/Lorn/07-俯视行走.png",
       "size": [
         1024,
         1024
@@ -519,10 +521,11 @@
           "lift": 0
         }
       ],
-      "status": "尺寸、RGBA、安全边距通过；姿态、循环与引擎适配待验收"
+      "status": "尺寸、RGBA、安全边距通过；已在 Godot 4.7.2 中按 4×4 网格播放四向动作；循环相位与脚底滑动待美术评审"
     },
     {
       "file": "08-俯视跑步.png",
+      "path": "Assets/Characters/Lorn/08-俯视跑步.png",
       "size": [
         1024,
         1024
@@ -982,7 +985,7 @@
           "lift": 6
         }
       ],
-      "status": "尺寸、RGBA、安全边距通过；姿态、循环与引擎适配待验收"
+      "status": "尺寸、RGBA、安全边距通过；已在 Godot 4.7.2 中按 4×4 网格播放四向动作；循环相位与脚底滑动待美术评审"
     }
   ],
   "pending": [
