@@ -1,98 +1,76 @@
 extends SceneTree
-
-var _failed := 0
-
-
+var failures := 0
 func _initialize() -> void:
 	_run.call_deferred()
-
-
+func check(value: bool, message: String) -> void:
+	if not value:
+		failures += 1
+		push_error(message)
 func _run() -> void:
 	var screen = load("res://Scenes/Battle/battle.tscn").instantiate()
 	root.add_child(screen)
-	await process_frame
-	await process_frame
-
-	_check(screen.timeline_row.get_child_count() == 6, "时间轴应展示未来六次行动")
-	_check(screen.card_grid.get_child_count() == 8, "卡牌区按钮数量应等于洛恩持有卡数")
-	_check(screen.field_row.get_child_count() == 2, "战场应包含我方与敌方两列")
-	_check(screen.log_label != null, "战斗日志应已构建")
-	_check(screen.resource_box.get_child_count() > 0, "资源区应已构建")
-
-	var guard_button := _find_card_button(screen, "防御")
-	_check(guard_button != null, "应能找到防御卡按钮")
-	if guard_button != null:
-		guard_button.pressed.emit()
-		await process_frame
-		_check(is_instance_valid(screen) and screen.battle.outcome == "ongoing", "点击防御后界面应继续可用")
-		_check(screen.card_grid.get_child_count() == 8, "点击防御后卡牌区应重建完成")
-
-	var lorn: RefCounted = screen.battle.allies[0]
-	var start_hp: int = lorn.hp
-	var start_log: String = screen.log_label.text
-	_auto_play(screen, 300)
-	_check(screen.battle.outcome != "ongoing", "循环出卡后战斗应结束")
-	_check(screen.result_panel.visible, "战斗结束时应显示结果面板")
-	_check(screen.card_grid.get_child_count() == 8, "不可用或战斗结束后卡牌仍应保留在界面中")
-	_check(screen.log_label.text != start_log and screen.log_label.text != "", "日志应随出卡追加内容")
-	_check(lorn.hp != start_hp or screen.battle.outcome == "victory", "资源或战局应随出卡变化")
-
-	var disabled := 0
-	for child in screen.card_grid.get_children():
-		if child.disabled:
-			disabled += 1
-	_check(disabled == 8, "战斗结束后卡牌区应全部禁用")
-
-	if _failed > 0:
-		push_error("FAILED: %d checks" % _failed)
-		quit(1)
-		return
-	print("PASS: battle screen layout, cards, combat loop, log and resources")
+	await create_timer(1.1).timeout
+	check(screen.buttons.size() == 6 and screen.targets.size() == 2, "技能道具和两侧目标")
+	check(screen.battle.current_id() == "lorn", "敌人先攻后归还控制")
+	var hp: int = screen.battle.enemy.hp
+	screen.buttons.strike.pressed.emit()
+	check(screen.selected == "strike" and screen.battle.enemy.hp == hp, "选技能不立即伤害")
+	check(not screen.targets.goblin.disabled and screen.targets.lorn.disabled, "仅合法目标可点击")
+	var cancel := InputEventKey.new()
+	cancel.keycode = KEY_ESCAPE
+	cancel.pressed = true
+	screen._input(cancel)
+	check(screen.selected.is_empty() and screen.battle.action == 1, "取消不消耗行动")
+	screen.buttons.strike.pressed.emit()
+	screen.targets.goblin.pressed.emit()
+	await create_timer(0.5).timeout
+	check(screen.battle.action == 0, "点击目标后消耗一次行动")
+	for button in screen.buttons.values(): check(button.disabled, "行动用尽后所有技能和道具禁用")
+	check(not screen.end_button.disabled, "结束回合仍可用")
+	screen.end_button.pressed.emit()
+	await create_timer(1.1).timeout
+	check(screen.battle.action == 1 and screen.battle.current_id() == "lorn", "下一回合恢复一次行动")
+	screen.battle.hero.hp = 15
+	screen._select("potion")
+	check(not screen.targets.lorn.disabled and screen.targets.goblin.disabled, "治疗选择己方")
+	screen.targets.lorn.pressed.emit()
+	await create_timer(0.5).timeout
+	check(screen.battle.hero.hp == 27 and screen.battle.action == 0, "治疗界面操作")
+	# 使用实际目标点击贯穿胜利和结算界面。
+	screen.battle.enemy.hp = 1
+	screen.battle.hero.hp = 1000
+	for step in range(30):
+		if screen.battle.outcome != "ongoing": break
+		if screen.battle.action == 0:
+			screen._end_turn()
+			await create_timer(1.1).timeout
+		screen._select("strike")
+		screen._target("goblin")
+		await create_timer(0.5).timeout
+	check(screen.battle.outcome == "victory" and screen.result_panel.visible, "胜利面板可见")
+	check(screen.end_button.disabled, "结算后禁止结束回合")
 	screen.queue_free()
 	await process_frame
-	quit(0)
-
-
-func _check(condition: bool, message: String) -> void:
-	if not condition:
-		_failed += 1
-		push_error(message)
-
-
-func _auto_play(screen, limit: int) -> void:
-	var steps := 0
-	while screen.battle.outcome == "ongoing" and steps < limit:
-		var actor: RefCounted = screen.battle.current_actor()
-		if actor == null or actor.team != "ally":
-			screen.battle.advance_until_player_turn()
-			steps += 1
-			continue
-		var played := false
-		var target := _first_alive(screen.battle.enemies)
-		for card in screen.battle.available_cards(actor):
-			if not card["can_play"]:
-				continue
-			var kind := str(card["target"])
-			if kind == "enemy_single" and target != null:
-				played = screen.try_play(str(card["card_id"]), target)
-			elif kind != "enemy_single":
-				played = screen.try_play(str(card["card_id"]))
-			if played:
-				break
-		if not played:
-			break
-		steps += 1
-
-
-func _find_card_button(screen, card_name: String) -> Button:
-	for child in screen.card_grid.get_children():
-		if child is Button and str(child.text).begins_with(card_name):
-			return child
-	return null
-
-
-func _first_alive(units: Array) -> RefCounted:
-	for unit in units:
-		if unit.is_alive():
-			return unit
-	return null
+	var flow = root.get_node("GameFlow")
+	flow.run = load("res://Scripts/Exploration/floor_run.gd").new()
+	flow.run.setup(123)
+	flow.show_map = true
+	screen = load("res://Scenes/Battle/battle.tscn").instantiate()
+	root.add_child(screen)
+	await process_frame
+	check(screen.map_visible, "地图入口")
+	screen._enter_node("1a")
+	await create_timer(1.1).timeout
+	check(not screen.map_visible and flow.run.pending == "1a", "地图节点进入战斗")
+	screen.battle.enemy.hp = 0
+	screen.battle._check_outcome()
+	screen._settle()
+	screen.show_floor_map()
+	check(flow.run.current == "1a" and flow.run.pending == "" and screen.map_visible, "胜利返回同层进度")
+	screen.size = Vector2(960, 540)
+	screen._layout()
+	check(is_equal_approx(screen.canvas.scale.x, 0.75), "小窗口完整缩放")
+	screen.queue_free()
+	await process_frame
+	print("SCREEN CHECKS: ", failures, " failures")
+	quit(1 if failures else 0)
