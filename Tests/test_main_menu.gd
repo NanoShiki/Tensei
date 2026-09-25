@@ -10,6 +10,7 @@ func _run() -> void:
 	assert(menu.background.texture != null)
 	assert(menu.continue_button.disabled)
 	assert(menu.start_button.has_focus())
+	assert(menu.animation_lab_button.text.contains("2.5D"))
 	menu.apply_character_portrait({"illustration_id": "unknown.character"})
 	assert(menu.caption.text.contains("洛恩"))
 	menu._open_character()

@@ -14,6 +14,7 @@ var caption: Label
 var status: Label
 var continue_button: Button
 var start_button: Button
+var animation_lab_button: Button
 var settings_button: Button
 var modal: PanelContainer
 var modal_shade: ColorRect
@@ -112,6 +113,7 @@ func _build_menu() -> void:
 	continue_button.disabled = true
 	continue_button.tooltip_text = "尚无可继续的旅程"
 	start_button = _button("开始旅程    →", _open_character, menu_column)
+	animation_lab_button = _button("2.5D 动画试验场    →", _open_animation_lab, menu_column)
 	settings_button = _button("设置", _open_settings, menu_column)
 	_button("退出游戏", _open_quit, menu_column)
 	status = _label("序章  /  新的起点", 13, Color(PAPER, 0.5))
@@ -195,6 +197,12 @@ func _start_battle() -> void:
 	var flow := get_node_or_null("/root/GameFlow")
 	if flow != null:
 		flow.start_battle("lorn")
+
+
+func _open_animation_lab() -> void:
+	var flow := get_node_or_null("/root/GameFlow")
+	if flow != null:
+		flow.start_animation_lab()
 
 
 func _open_settings() -> void:
