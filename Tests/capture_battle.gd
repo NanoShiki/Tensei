@@ -4,10 +4,19 @@ func _initialize() -> void:
 	_capture.call_deferred()
 
 func _capture() -> void:
-	if OS.get_environment("TENSEI_CAPTURE_MODE") == "map":
+	var mode := OS.get_environment("TENSEI_CAPTURE_MODE")
+	if mode in ["map", "return", "returned"]:
 		var flow = root.get_node("GameFlow")
 		flow.run = load("res://Scripts/Exploration/floor_run.gd").new()
 		flow.run.setup(123)
+		if mode in ["return", "returned"]:
+			flow.run.enter("1a")
+			flow.run.finish_battle(flow.run.character, true)
+			flow.run.enter("2b")
+			flow.run.begin_return()
+			if mode == "returned":
+				while flow.run.phase == "returning":
+					flow.run.step_return(flow.run.return_target().key)
 		flow.show_map = true
 	if OS.get_environment("TENSEI_CAPTURE_SMALL") == "1":
 		root.size = Vector2i(960, 540)

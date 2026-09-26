@@ -89,5 +89,56 @@ func _initialize() -> void:
 		check(run.node("2a").reward_claimed and run.character.potions == stock + 1, "补给领取记录与库存一致")
 		check(run.enter("2a") == "" and run.character.potions == stock + 1, "重复生成后也不能再次领取补给")
 	check(saw_cache, "覆盖补给分支")
+	test_return()
 	print("EXPEDITION HISTORY CHECKS: ", failures, " failures")
 	quit(1 if failures else 0)
+
+func test_return() -> void:
+	var run := Run.new()
+	run.setup(123, 3)
+	run.enter("1a")
+	check(not run.begin_return() and run.return_target().is_empty(), "战斗待结算时不能返程")
+	run.finish_battle(run.character, true)
+	run.enter("2b")
+	advance_floor(run)
+	advance_floor(run)
+	advance_floor(run)
+	var route: Array = run.route.duplicate()
+	var inventory: Dictionary = run.character.duplicate(true)
+	var histories: Array = [run.floor_snapshot(1), run.floor_snapshot(2), run.floor_snapshot(3)]
+	check(run.completed and run.begin_return(), "抵达最深出口后仍可返程")
+	check(not run.begin_return() and run.enter("entry") == "", "返程不能重新开始或转为下潜")
+	check(not run.step_return("wrong") and run.current == "exit", "错误目标不得移动")
+	for index in range(route.size() - 2, -1, -1):
+		var target: Dictionary = run.return_target()
+		check(target.key == route[index], "返程严格沿所选路线逆序")
+		var key: String = target.key
+		target.id = "tampered"
+		check(run.step_return(key), "合法返程目标可移动，预览修改不污染状态")
+		check(run.node(run.current).key == route[index], "跨层返回实际历史节点")
+		check(not run.step_return(key), "同一目标重复提交不会多走一步")
+		check(run.character == inventory, "回经战斗、营地和补给不增减资源")
+	check(run.floor_number == 1 and run.current == "entry", "路线尽头为首层入口")
+	check(run.return_summary().is_empty(), "抵达入口尚未结算回城")
+	var city: String = run.return_target().key
+	check(run.step_return(city) and run.phase == "returned", "首层入口回城成功")
+	var summary: Dictionary = run.return_summary()
+	var clear_count := 0
+	for history in histories:
+		for item in history:
+			if item.cleared: clear_count += 1
+	check(summary.deepest_floor == 3 and summary.cleared_count == clear_count and summary.character == inventory, "摘要深度、战斗次数及剩余资源准确")
+	check(not run.step_return(city) and not run.begin_return() and not run.can_enter("1a"), "回城后不能重复结算或继续移动")
+	summary.character.hp = -1
+	check(run.return_summary().character.hp == inventory.hp, "摘要深拷贝隔离")
+	check(run.route == route, "返程保留完整下潜历史")
+	for level in range(1, 4):
+		check(run.floor_snapshot(level) == histories[level - 1], "返程不清空地图或领取记录")
+	run.setup(1, 3)
+	check(run.phase == "descending" and run.return_summary().is_empty() and run.deepest_floor == 1, "新远征清空返程与摘要")
+	check(run.begin_return() and run.step_return(run.return_target().key), "首层入口可直接回城")
+	check(run.return_summary().cleared_count == 0, "零战斗摘要")
+	run.setup(1, 3)
+	run.enter("1a")
+	run.finish_battle(run.character, false)
+	check(not run.begin_return() and not run.step_return(run.run_id + "/city"), "失败不能伪装成功回城")

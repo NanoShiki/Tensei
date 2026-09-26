@@ -19,6 +19,8 @@ var hint_label: Label
 var log_label: Label
 var flow: Node
 var _settled := false
+var map_buttons: Dictionary = {}
+var expedition_button: Button
 
 func _ready() -> void:
 	flow = get_node_or_null("/root/GameFlow")
@@ -43,6 +45,8 @@ func _clear() -> void:
 		child.queue_free()
 	buttons.clear()
 	targets.clear()
+	map_buttons.clear()
+	expedition_button = null
 
 func _panel(rect: Rect2, color: Color = Color("182326"), border: Color = Color("3d4a48")) -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -297,28 +301,65 @@ func show_floor_map() -> void:
 	_clear()
 	_backdrop()
 	var run: RefCounted = flow.run
+	if run.phase == "returned":
+		_show_return_summary()
+		return
 	_label("地 下 城   /   路 线", Rect2(32, 18, 450, 42), 25, GOLD)
 	_label("第 %02d / %02d 层" % [run.floor_number, run.total_floors], Rect2(550, 20, 400, 40), 25)
-	_button("返回主菜单", Rect2(1080, 22, 170, 40), _return_to_menu)
-	_label("每层一张地图   ·   沿连线前进   ·   抵达出口后进入下一层", Rect2(40, 103, 1150, 40), 19, MUTED)
+	_button("放弃并回主菜单", Rect2(1060, 22, 190, 40), _return_to_menu)
+	var returning: bool = run.phase == "returning"
+	var destination: Dictionary = run.return_target()
+	_label("返程 · 沿已走路线返回城市" if returning else "下潜 · 沿连线前进，也可随时开始返程", Rect2(40, 100, 1150, 38), 21, GOLD)
+	_label("当前返程无刷新遭遇；营地与补给仅领取一次。", Rect2(40, 145, 770, 34), 17, MUTED)
+	if returning and not destination.is_empty():
+		var action := "回到城市" if destination.id == "city" else "沿原路返回 · 第 %d 层" % destination.floor
+		expedition_button = _button(action, Rect2(880, 144, 350, 42), _return_step.bind(str(destination.key)), true)
+	else:
+		expedition_button = _button("开始返程", Rect2(980, 144, 250, 42), _begin_return, true)
+		expedition_button.disabled = not run.can_begin_return()
 	for item in run.nodes:
 		for next_id in item.next:
 			var line := Line2D.new()
 			line.add_point(_node_position(item) + Vector2(64, 34))
 			line.add_point(_node_position(run.node(next_id)) + Vector2(64, 34))
-			line.default_color = GOLD if item.id == run.current else Color("47544c")
+			var active_edge: bool = item.id == run.current
+			if returning:
+				active_edge = not destination.is_empty() and item.key == destination.key and next_id == run.current
+			line.default_color = GOLD if active_edge else Color("47544c")
 			line.width = 2
 			canvas.add_child(line)
-	var names := {"entry": "入口", "battle": "战斗", "rest": "营地 +10 HP", "cache": "补给 +1 药水", "exit": "下层出口"}
+	var names := {"entry": "入口", "battle": "战斗", "rest": "营地 +10 HP", "cache": "补给 +1 药水", "exit": "本层出口"}
 	for item in run.nodes:
 		var title: String = names[item.kind]
 		if item.id == run.current: title = "当前位置\n" + title
 		elif item.done: title = "已完成\n" + title
-		var button := _button(title, Rect2(_node_position(item), Vector2(148, 68)), _enter_node.bind(str(item.id)), run.can_enter(item.id))
-		button.disabled = not run.can_enter(item.id)
+		var return_here: bool = returning and not destination.is_empty() and destination.key == item.key
+		if return_here: title = "返程下一站\n" + names[item.kind]
+		var callback: Callable = _return_step.bind(str(item.key)) if returning else _enter_node.bind(str(item.id))
+		var enabled: bool = return_here if returning else run.can_enter(item.id)
+		var button := _button(title, Rect2(_node_position(item), Vector2(148, 68)), callback, enabled)
+		button.disabled = not enabled
+		map_buttons[item.id] = button
 	_panel(Rect2(24, 540, 1232, 155))
 	_label("洛恩   /   生命 %d / %d    治疗药水 %d    灼烧药水 %d" % [run.character.hp, run.character.max_hp, run.character.potions, run.character.fire_potions], Rect2(48, 563, 1100, 36), 23, GOLD)
 	_label(run.message, Rect2(48, 619, 1150, 38), 20)
+
+func _begin_return() -> void:
+	if flow.run.begin_return(): show_floor_map()
+
+func _return_step(key: String) -> void:
+	if flow.run.step_return(key): show_floor_map()
+
+func _show_return_summary() -> void:
+	var summary: Dictionary = flow.run.return_summary()
+	var hero: Dictionary = summary.character
+	_panel(Rect2(230, 135, 820, 480))
+	_label("平 安 归 来", Rect2(285, 175, 700, 55), 36, GOLD)
+	_label("最深抵达  第 %d 层     /     清理战斗  %d 场" % [summary.deepest_floor, summary.cleared_count], Rect2(285, 265, 720, 45), 24)
+	_label("剩余生命  %d / %d" % [hero.hp, hero.max_hp], Rect2(285, 330, 700, 38), 23)
+	_label("治疗药水  %d     /     灼烧药水  %d" % [hero.potions, hero.fire_potions], Rect2(285, 385, 700, 38), 23)
+	_label("本趟已结束。当前原型仅展示摘要，进度尚未保存。", Rect2(285, 450, 720, 35), 18, MUTED)
+	_button("返回主菜单", Rect2(465, 525, 350, 48), _return_to_menu, true)
 
 func _node_position(item: Dictionary) -> Vector2:
 	return Vector2(58 + int(item.step) * 244, 210 + int(item.lane) * 110)
