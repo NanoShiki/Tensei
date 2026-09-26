@@ -309,11 +309,15 @@ func show_floor_map() -> void:
 	_button("放弃并回主菜单", Rect2(1060, 22, 190, 40), _return_to_menu)
 	var returning: bool = run.phase == "returning"
 	var destination: Dictionary = run.return_target()
-	_label("返程 · 沿已走路线返回城市" if returning else "下潜 · 沿连线前进，也可随时开始返程", Rect2(40, 100, 1150, 38), 21, GOLD)
-	_label("当前返程无刷新遭遇；营地与补给仅领取一次。", Rect2(40, 145, 770, 34), 17, MUTED)
+	var return_keys: Array = []
+	for choice in run.return_targets(): return_keys.append(choice.key)
+	_label("返程 · 沿向上连线自由选择路线" if returning else "下潜 · 沿连线前进，也可随时开始返程", Rect2(40, 100, 1150, 38), 21, GOLD)
+	_label("已移动 %d 步 · 每步刷新倒计时 -1；停留与战斗不计步。" % run.steps_taken, Rect2(40, 145, 770, 34), 17, MUTED)
 	if returning and not destination.is_empty():
-		var action := "回到城市" if destination.id == "city" else "沿原路返回 · 第 %d 层" % destination.floor
+		var action := "回到城市" if destination.id == "city" else "返回第 %d 层" % destination.floor
 		expedition_button = _button(action, Rect2(880, 144, 350, 42), _return_step.bind(str(destination.key)), true)
+	elif returning:
+		_label("请选择高亮的返程节点", Rect2(880, 144, 350, 42), 20, GOLD)
 	else:
 		expedition_button = _button("开始返程", Rect2(980, 144, 250, 42), _begin_return, true)
 		expedition_button.disabled = not run.can_begin_return()
@@ -324,7 +328,7 @@ func show_floor_map() -> void:
 			line.add_point(_node_position(run.node(next_id)) + Vector2(64, 34))
 			var active_edge: bool = item.id == run.current
 			if returning:
-				active_edge = not destination.is_empty() and item.key == destination.key and next_id == run.current
+				active_edge = item.key in return_keys and next_id == run.current
 			line.default_color = GOLD if active_edge else Color("47544c")
 			line.width = 2
 			canvas.add_child(line)
@@ -333,12 +337,31 @@ func show_floor_map() -> void:
 		var title: String = names[item.kind]
 		if item.id == run.current: title = "当前位置\n" + title
 		elif item.done: title = "已完成\n" + title
-		var return_here: bool = returning and not destination.is_empty() and destination.key == item.key
-		if return_here: title = "返程下一站\n" + names[item.kind]
+		var return_here: bool = returning and item.key in return_keys
+		if return_here: title = "可选返程\n" + names[item.kind]
+		if item.kind == "battle":
+			var status: String = "怪物在场" if item.enemy_active else "刷新还需 %d 步" % item.respawn_in
+			title = ("当前位置\n" if item.id == run.current else ("可选返程\n" if return_here else "")) + status
 		var callback: Callable = _return_step.bind(str(item.key)) if returning else _enter_node.bind(str(item.id))
 		var enabled: bool = return_here if returning else run.can_enter(item.id)
 		var button := _button(title, Rect2(_node_position(item), Vector2(148, 68)), callback, enabled)
 		button.disabled = not enabled
+		if item.kind == "battle":
+			button.tooltip_text = "每次合法移动先扣一步，再检查目的地。" + ("此处剩 1 步，进入时将遇敌。" if item.respawn_in == 1 and not item.enemy_active else "停留、预览和战斗回合不推进刷新。")
+			if item.cleared:
+				var progress := ProgressBar.new()
+				progress.position = _node_position(item) + Vector2(4, 60)
+				progress.size = Vector2(140, 5)
+				progress.max_value = item.respawn_total
+				progress.value = item.respawn_total - item.respawn_in
+				progress.show_percentage = false
+				for style_name in ["background", "fill"]:
+					var bar_style := StyleBoxFlat.new()
+					bar_style.bg_color = GOLD if style_name == "fill" else Color("3d4a48")
+					bar_style.set_content_margin_all(0)
+					progress.add_theme_stylebox_override(style_name, bar_style)
+				progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				canvas.add_child(progress)
 		map_buttons[item.id] = button
 	_panel(Rect2(24, 540, 1232, 155))
 	_label("洛恩   /   生命 %d / %d    治疗药水 %d    灼烧药水 %d" % [run.character.hp, run.character.max_hp, run.character.potions, run.character.fire_potions], Rect2(48, 563, 1100, 36), 23, GOLD)
@@ -348,7 +371,9 @@ func _begin_return() -> void:
 	if flow.run.begin_return(): show_floor_map()
 
 func _return_step(key: String) -> void:
-	if flow.run.step_return(key): show_floor_map()
+	if flow.run.step_return(key):
+		if not flow.run.pending.is_empty(): start_encounter()
+		else: show_floor_map()
 
 func _show_return_summary() -> void:
 	var summary: Dictionary = flow.run.return_summary()

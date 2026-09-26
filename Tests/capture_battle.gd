@@ -16,7 +16,8 @@ func _capture() -> void:
 			flow.run.begin_return()
 			if mode == "returned":
 				while flow.run.phase == "returning":
-					flow.run.step_return(flow.run.return_target().key)
+					flow.run.step_return(flow.run.return_targets()[0].key)
+					if not flow.run.pending.is_empty(): flow.run.finish_battle(flow.run.character, true)
 		flow.show_map = true
 	if OS.get_environment("TENSEI_CAPTURE_SMALL") == "1":
 		root.size = Vector2i(960, 540)
