@@ -128,6 +128,14 @@ func _check_outcome() -> void:
 	if enemy.hp <= 0: outcome = "victory"
 	elif hero.hp <= 0: outcome = "defeat"
 
+func gm_kill_enemy() -> bool:
+	if outcome != "ongoing" or hero.hp <= 0: return false
+	enemy.hp = 0
+	logs.append("GM：秒杀当前敌人。")
+	last_event = {"actor": "gm", "target": enemy.id, "text": "GM 秒杀"}
+	_check_outcome()
+	return true
+
 # 仅供规则效果调用；额外行动当回合有效，不跨回合积攒。
 func grant_actions(amount: int) -> void:
 	if current_id() == "lorn" and amount > 0:

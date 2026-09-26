@@ -21,6 +21,7 @@ var flow: Node
 var _settled := false
 
 func _ready() -> void:
+	add_to_group("gm_battle_context")
 	flow = get_node_or_null("/root/GameFlow")
 	canvas = Control.new()
 	canvas.size = Vector2(1280, 720)
@@ -287,6 +288,20 @@ func _settle() -> void:
 		flow.active_character = battle.hero.duplicate(true)
 		if flow.run != null: flow.run.finish_battle(battle.hero, battle.outcome == "victory")
 
+func gm_kill_reason() -> String:
+	if map_visible or battle == null: return "请先进入战斗"
+	if battle.outcome != "ongoing" or _settled: return "战斗已结束"
+	if busy: return "等待当前动作结束"
+	return ""
+
+func gm_kill_enemy() -> bool:
+	if not gm_kill_reason().is_empty(): return false
+	if not battle.gm_kill_enemy(): return false
+	selected = ""
+	_settle()
+	_refresh()
+	return true
+
 func _restart_demo() -> void:
 	if flow != null: flow.active_character = CharacterLibrary.resolve()
 	start_encounter()
@@ -332,6 +347,8 @@ func _return_to_menu() -> void:
 	if flow != null: flow.return_to_menu()
 
 func _input(event: InputEvent) -> void:
+	var gm := get_tree().get_first_node_in_group("gm_panel")
+	if gm != null and gm.is_open(): return
 	if map_visible or busy or battle == null: return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		selected = ""

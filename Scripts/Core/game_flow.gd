@@ -8,6 +8,10 @@ var active_character: Dictionary = {}
 var run: RefCounted
 var show_map := false
 
+func _ready() -> void:
+	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
+	add_child(gm)
+
 func start_battle(character_id: String) -> void:
 	run = null
 	show_map = false
