@@ -349,19 +349,17 @@ func show_floor_map() -> void:
 		if item.kind == "battle":
 			button.tooltip_text = "每次合法移动先扣一步，再检查目的地。" + ("此处剩 1 步，进入时将遇敌。" if item.respawn_in == 1 and not item.enemy_active else "停留、预览和战斗回合不推进刷新。")
 			if item.cleared:
-				var progress := ProgressBar.new()
-				progress.position = _node_position(item) + Vector2(4, 60)
-				progress.size = Vector2(140, 5)
-				progress.max_value = item.respawn_total
-				progress.value = item.respawn_total - item.respawn_in
-				progress.show_percentage = false
-				for style_name in ["background", "fill"]:
-					var bar_style := StyleBoxFlat.new()
-					bar_style.bg_color = GOLD if style_name == "fill" else Color("3d4a48")
-					bar_style.set_content_margin_all(0)
-					progress.add_theme_stylebox_override(style_name, bar_style)
+				var progress := ColorRect.new()
+				progress.position = _node_position(item) + Vector2(4, 61)
+				progress.size = Vector2(140, 4)
+				progress.color = Color("3d4a48")
 				progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				canvas.add_child(progress)
+				var fill := ColorRect.new()
+				fill.size = Vector2(140.0 * (item.respawn_total - item.respawn_in) / maxi(1, item.respawn_total), 4)
+				fill.color = GOLD
+				fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				progress.add_child(fill)
 		map_buttons[item.id] = button
 	_panel(Rect2(24, 540, 1232, 155))
 	_label("洛恩   /   生命 %d / %d    治疗药水 %d    灼烧药水 %d" % [run.character.hp, run.character.max_hp, run.character.potions, run.character.fire_potions], Rect2(48, 563, 1100, 36), 23, GOLD)
