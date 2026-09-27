@@ -10,6 +10,7 @@ var show_map := false
 var saves := preload("res://Scripts/Core/save_library.gd").new()
 var profile: Dictionary = {}
 var active_record_id := ""
+var _pending_scene := ""
 
 func continue_exploration() -> bool:
 	var saved: Dictionary = saves.inspect()
@@ -50,5 +51,13 @@ func return_to_menu() -> void:
 	_change_scene(MENU_SCENE)
 
 func _change_scene(path: String) -> void:
+	if not _pending_scene.is_empty(): return
+	_pending_scene = path
+	_commit_scene.call_deferred()
+
+func _commit_scene() -> void:
+	# 按钮可能属于 Window 视口，等当前输入事件分发结束后再移除旧场景。
+	var path := _pending_scene
+	_pending_scene = ""
 	var error := get_tree().change_scene_to_file(path)
 	if error != OK: push_error("场景切换失败：%s（%s）" % [path, error_string(error)])

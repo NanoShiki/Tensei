@@ -53,6 +53,10 @@ func frames() -> void:
 	await process_frame
 	await process_frame
 
+func click(button: Button) -> void:
+	var viewport := button.get_viewport()
+	button.pressed.emit()
+	check(viewport.is_inside_tree(), "按钮回调返回前不移除所属视口")
 func cleanup(prefix: String) -> void:
 	# 仅删除本测试的唯一前缀目录，逐文件清理，保留玩家存档。
 	assert(prefix.begins_with("user://test-library-"))
@@ -139,7 +143,8 @@ func _run() -> void:
 	var window = browser()
 	check(window != null and window.heading.text.contains("界面角色"), "保存窗口定位当前角色")
 	window.name_input.text = "初始记录"
-	window.save_button.pressed.emit()
+	await frames()
+	click(window.save_button)
 	await frames()
 	check(not current_scene.continue_button.disabled, "成功保存退出后继续入口启用")
 	current_scene.continue_button.pressed.emit()
@@ -160,7 +165,7 @@ func _run() -> void:
 	window.list_buttons[0].pressed.emit()
 	check(window.list_buttons.size() == 2, "选择角色后展示两条记录")
 	for button in window.list_buttons:
-		if button.text.begins_with("初始记录"): button.pressed.emit()
+		if button.text.begins_with("初始记录"): click(button)
 	await frames()
 	check(flow.run.save_data() == ui_initial, "点选旧记录恢复旧状态")
 	current_scene._request_save_exit()
@@ -177,7 +182,9 @@ func _run() -> void:
 	check(flow.saves.read_record(ui_profile.id, window.selected_id).run.save_data() == ui_later, "取消覆盖保留该条旧状态")
 	window.save_button.pressed.emit()
 	for child in window.get_children():
-		if child is ConfirmationDialog: child.confirmed.emit()
+		if child is ConfirmationDialog:
+			child.confirmed.emit()
+			check(child.is_inside_tree() and window.is_inside_tree(), "覆盖确认回调结束前保留两层视口")
 	await frames()
 	check(flow.saves.list_records(ui_profile.id).size() == 2, "确认覆盖仍只有两条记录")
 	check(flow.saves.inspect().run.save_data() == ui_initial, "确认覆盖写入选定记录")
