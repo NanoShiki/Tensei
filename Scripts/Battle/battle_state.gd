@@ -1,7 +1,9 @@
 extends RefCounted
 
+const Log = preload("res://Scripts/Core/game_log.gd")
 const Abilities = preload("res://Scripts/Battle/ability_library.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
+var battle_id := ""
 var hero: Dictionary
 var enemy: Dictionary
 var rng := RandomNumberGenerator.new()
@@ -15,6 +17,7 @@ var logs: Array[String] = []
 var last_event: Dictionary = {}
 
 func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1) -> void:
+	battle_id = Crypto.new().generate_random_bytes(8).hex_encode()
 	hero = character.duplicate(true)
 	hero["surge"] = 1
 	enemy = {"id": "goblin", "name": "哥布林", "max_hp": 22 + mini(floor_number - 1, 20),
@@ -37,6 +40,12 @@ func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1) -
 	logs.append("先攻：洛恩 %d / 哥布林 %d。" % [h, e])
 	if hero.hp <= 0:
 		outcome = "defeat"
+	Log.event("battle", "start", {"seed": str(rng.seed), "order": order, "state": log_state()})
+
+func log_state() -> Dictionary:
+	return {"battle_id": battle_id, "hero": hero.duplicate(true), "enemy": enemy.duplicate(true), "round": round_number,
+		"actor": current_id(), "actions": action, "guarding": guarding, "outcome": outcome,
+		"last_event": last_event.duplicate(true)}
 
 func current_id() -> String:
 	return order[cursor] if outcome == "ongoing" else ""
@@ -57,6 +66,12 @@ func hit_chance(id: String) -> int:
 	return clampi(21 + modifier - int(enemy.ac), 1, 19) * 5
 
 func use_ability(id: String, target: String) -> bool:
+	var before := log_state()
+	var result := _use_ability(id, target)
+	Log.event("battle", "use_ability", {"input": {"ability": id, "target": target}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _use_ability(id: String, target: String) -> bool:
 	if not reason(id).is_empty(): return false
 	var entry: Dictionary = Abilities.ENTRIES[id]
 	if target != ("goblin" if entry.target == "enemy" else "lorn"): return false
@@ -102,14 +117,27 @@ func _attack(attacker: Dictionary, target: Dictionary, die: int, damage_bonus: i
 	var text := ("暴击 −%d" if roll == 20 else "−%d") % damage if hit else "未命中"
 	logs.append("%s：d20(%d)+%d 对 AC %d → %s" % [attacker.name, roll, modifier, target.ac, text])
 	last_event = {"actor": attacker.id, "target": target.id, "text": text}
+	Log.event("battle", "attack", {"battle_id": battle_id, "actor": attacker.id, "target": target.id, "roll": roll, "modifier": modifier, "ac": target.ac, "hit": hit, "damage": damage, "remaining_hp": target.hp})
 
 func end_turn() -> bool:
+	var before := log_state()
+	var result := _end_turn()
+	Log.event("battle", "end_turn", {"input": {}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _end_turn() -> bool:
 	if current_id() != "lorn": return false
 	logs.append("洛恩结束回合。")
 	_advance()
 	return true
 
 func enemy_turn() -> bool:
+	var before := log_state()
+	var result := _enemy_turn()
+	Log.event("battle", "enemy_turn", {"input": {}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _enemy_turn() -> bool:
 	if current_id() != "goblin": return false
 	_attack(enemy, hero, 6, 1)
 	_check_outcome()
@@ -130,6 +158,12 @@ func _check_outcome() -> void:
 	elif hero.hp <= 0: outcome = "defeat"
 
 func gm_kill_enemy() -> bool:
+	var before := log_state()
+	var result := _gm_kill_enemy()
+	Log.event("battle", "gm_kill_enemy", {"input": {}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _gm_kill_enemy() -> bool:
 	if outcome != "ongoing" or hero.hp <= 0: return false
 	enemy.hp = 0
 	logs.append("GM：秒杀当前敌人。")

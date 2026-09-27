@@ -144,6 +144,7 @@ func _open_saves() -> void:
 	browser.load_requested.connect(func(profile_id: String, record_id: String):
 		if flow.load_exploration(profile_id, record_id): browser.queue_free()
 		else: browser.feedback.text = flow.saves.message)
+	browser.records_changed.connect(_refresh_continue)
 	browser.open(flow.saves)
 
 
