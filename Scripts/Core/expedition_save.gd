@@ -37,6 +37,7 @@ func inspect() -> Dictionary:
 	for suffix in [".0.save", ".1.save"]:
 		var candidate := _read(base_path + suffix)
 		if candidate.has("incompatible"):
+			# 任一代来自其他版本时禁止降级读写，避免下一次保存覆盖未来版本。
 			message = "存档版本或内容版本不兼容。原档已保留。"
 			return {}
 		if candidate.has("invalid"): damaged = true
@@ -55,7 +56,9 @@ func save_run(run: RefCounted, metadata: Dictionary = {}) -> bool:
 		return false
 	if not metadata.is_empty(): snapshot["_save_meta"] = metadata.duplicate(true)
 	var previous := inspect()
-	if previous.is_empty() and message != "尚无可继续的旅程": return false
+	if previous.is_empty() and message != "尚无可继续的旅程":
+		message = "保存失败：已有记录不兼容或无法恢复，已保留原文件。请另存为新记录。"
+		return false
 	var generation: int = previous.get("generation", 0) + 1
 	var target := base_path + (".0.save" if generation % 2 == 1 else ".1.save")
 	var temporary := base_path + ".tmp"
@@ -70,12 +73,14 @@ func save_run(run: RefCounted, metadata: Dictionary = {}) -> bool:
 	var error := file.get_error()
 	file.close()
 	if error != OK or not _read(temporary).has("run"):
+		DirAccess.remove_absolute(temporary)
 		message = "保存校验失败。之前的存档已保留，请重试。"
 		return false
 	if FileAccess.file_exists(target):
 		error = DirAccess.remove_absolute(target)
 	if error == OK: error = DirAccess.rename_absolute(temporary, target)
 	if error != OK:
+		DirAccess.remove_absolute(temporary)
 		message = "保存提交失败。之前的存档已保留，请重试。"
 		return false
 	message = "旅程已保存。"

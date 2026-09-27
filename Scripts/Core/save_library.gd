@@ -101,7 +101,9 @@ func _remember(profile_id: String, record_id: String) -> void:
 	var error := config.save(temporary)
 	if error == OK and FileAccess.file_exists(target): error = DirAccess.remove_absolute(target)
 	if error == OK: error = DirAccess.rename_absolute(temporary, target)
-	if error != OK: message = "记录可用，但最近游玩入口未更新；请从“读取存档”选择。"
+	if error != OK:
+		DirAccess.remove_absolute(temporary)
+		message = "记录可用，但最近游玩入口未更新；请从“读取存档”选择。"
 
 func inspect() -> Dictionary:
 	var config := ConfigFile.new()
