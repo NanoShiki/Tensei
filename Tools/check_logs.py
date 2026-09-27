@@ -36,6 +36,17 @@ def inspect(paths):
             if row["level"] == "ERROR":
                 errors.append(label + ": " + str(row["data"].get("message", row["data"])))
             data = row["data"]
+            if row["category"] == "inventory" and row["event"] == "field_potion":
+                try:
+                    before, after = data["before"], data["after"]
+                    if data["success"]:
+                        assert after["hero"]["potions"] == before["hero"]["potions"] - 1, "potion stock"
+                        assert after["hero"]["hp"] == min(before["hero"]["hp"] + 12, before["hero"]["max_hp"]), "field healing"
+                        assert after["steps"] == before["steps"] and after["respawn"] == before["respawn"], "potion advanced exploration clock"
+                    else:
+                        assert before == after, "rejected potion changed state"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "battle" and "after" in data:
                 try:
                     state = data["after"]
