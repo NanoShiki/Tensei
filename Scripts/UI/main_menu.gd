@@ -28,6 +28,7 @@ func _ready() -> void:
 	_build_theme()
 	_build_background()
 	_build_menu()
+	_refresh_continue()
 	apply_character_portrait()
 	_load_settings()
 	resized.connect(_layout)
@@ -108,7 +109,7 @@ func _build_menu() -> void:
 	var gap := Control.new()
 	gap.custom_minimum_size.y = 28
 	menu_column.add_child(gap)
-	continue_button = _button("继续旅程", func(): pass, menu_column)
+	continue_button = _button("继续旅程", _continue_journey, menu_column)
 	continue_button.disabled = true
 	continue_button.tooltip_text = "尚无可继续的旅程"
 	start_button = _button("开始旅程    →", _open_character, menu_column)
@@ -119,6 +120,20 @@ func _build_menu() -> void:
 	caption = _label("", 16)
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(caption)
+
+func _refresh_continue() -> void:
+	var flow := get_node("/root/GameFlow")
+	var saved: Dictionary = flow.saves.inspect()
+	continue_button.disabled = saved.is_empty()
+	continue_button.tooltip_text = flow.saves.message
+	if saved.is_empty():
+		status.text = flow.saves.message
+	else:
+		status.text = "第 %d 层 · 已移动 %d 步" % [saved.run.floor_number, saved.run.steps_taken]
+		if not flow.saves.message.is_empty(): status.text += " · 使用恢复存档"
+
+func _continue_journey() -> void:
+	if not get_node("/root/GameFlow").continue_exploration(): _refresh_continue()
 
 
 func _layout() -> void:
@@ -185,6 +200,7 @@ func _open_character() -> void:
 	var description := _label("红发、热心，带着一把练习木剑长大。\n他的冒险即将开始。", 18)
 	content.add_child(description)
 	content.add_child(_label("选择逐层探索，或直接体验洛恩对哥布林。", 15, Color(PAPER, 0.6)))
+	content.add_child(_label("新旅程在保存时替换当前存档；战斗演示不写存档。", 15, Color(PAPER, 0.6)))
 	new_game_requested.emit("lorn")
 	_button("逐层探索    →", func(): get_node("/root/GameFlow").start_exploration(), content)
 	_button("战斗演示    →", _start_battle, content)

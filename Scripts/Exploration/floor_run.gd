@@ -235,3 +235,70 @@ func step_return(expected_key: String) -> bool:
 
 func return_summary() -> Dictionary:
 	return _summary.duplicate(true)
+
+func save_data() -> Dictionary:
+	# 只保存地图安全点；战斗中断恢复将在战斗状态可序列化后接入。
+	if phase not in ["descending", "returning"] or not pending.is_empty() or failed or character.hp <= 0: return {}
+	return {"seed": seed_value, "run_id": run_id, "total_floors": total_floors,
+		"floor_number": floor_number, "deepest_floor": deepest_floor, "phase": phase,
+		"current": current, "completed": completed, "steps_taken": steps_taken,
+		"battles_won": battles_won, "character": character.duplicate(true),
+		"floors": _floors.duplicate(true), "route": route.duplicate(), "return_route": return_route.duplicate()}
+
+static func from_save(data: Variant) -> RefCounted:
+	if not data is Dictionary: return null
+	var shape := {"seed": TYPE_INT, "run_id": TYPE_STRING, "total_floors": TYPE_INT,
+		"floor_number": TYPE_INT, "deepest_floor": TYPE_INT, "phase": TYPE_STRING,
+		"current": TYPE_STRING, "completed": TYPE_BOOL, "steps_taken": TYPE_INT,
+		"battles_won": TYPE_INT, "character": TYPE_DICTIONARY, "floors": TYPE_DICTIONARY,
+		"route": TYPE_ARRAY, "return_route": TYPE_ARRAY}
+	for key in shape:
+		if not data.has(key) or typeof(data[key]) != shape[key]: return null
+	if data.run_id.is_empty() or data.total_floors < 1 or data.total_floors > 1000: return null
+	if data.floor_number < 1 or data.floor_number > data.deepest_floor or data.deepest_floor > data.total_floors: return null
+	if data.phase not in ["descending", "returning"] or data.steps_taken < 0 or data.battles_won < 0: return null
+	var hero := CharacterLibrary.resolve()
+	for key in hero:
+		if not data.character.has(key) or typeof(data.character[key]) != typeof(hero[key]): return null
+	if data.character.id != "lorn" or data.character.max_hp <= 0 or data.character.hp <= 0 or data.character.hp > data.character.max_hp: return null
+	if data.character.potions < 0 or data.character.fire_potions < 0: return null
+	if data.floors.size() != data.deepest_floor: return null
+	var restored = load("res://Scripts/Exploration/floor_run.gd").new()
+	restored.setup(data.seed, data.total_floors, data.run_id)
+	# 用本内容版本生成拓扑校验存档，再覆盖运行时字段；不重新抽取已存刷新阈值。
+	for level in range(1, data.deepest_floor + 1):
+		restored.floor_number = level
+		restored.generate_floor()
+		if not data.floors.has(level) or not data.floors[level] is Array: return null
+		var saved_nodes: Array = data.floors[level]
+		if saved_nodes.size() != restored.nodes.size(): return null
+		for index in range(saved_nodes.size()):
+			var saved: Variant = saved_nodes[index]
+			var expected: Dictionary = restored.nodes[index]
+			if not saved is Dictionary: return null
+			for key in expected:
+				if not saved.has(key) or typeof(saved[key]) != typeof(expected[key]): return null
+			for key in ["id", "key", "kind", "step", "lane", "next"]:
+				if saved[key] != expected[key]: return null
+			if saved.respawn_in < 0 or saved.respawn_total < saved.respawn_in or saved.clear_count < 0: return null
+			if saved.kind == "battle":
+				if saved.enemy_active != (saved.respawn_in == 0): return null
+				if saved.cleared != (saved.clear_count > 0): return null
+			if (saved.cleared or saved.reward_claimed) and not saved.visited: return null
+			restored.nodes[index] = saved.duplicate(true)
+	for history in [data.route, data.return_route]:
+		for key in history:
+			if not key is String or not restored._locations.has(key): return null
+	restored.floor_number = data.floor_number
+	restored.nodes = restored._floors[data.floor_number]
+	if restored.node(data.current).is_empty() or not restored.node(data.current).visited: return null
+	restored.current = data.current
+	restored.phase = data.phase
+	restored.completed = data.completed
+	restored.steps_taken = data.steps_taken
+	restored.battles_won = data.battles_won
+	restored.character = data.character.duplicate(true)
+	restored.route.assign(data.route)
+	restored.return_route.assign(data.return_route)
+	restored.message = "已恢复旅程。楼层、到访记录与刷新步数保持保存时的状态。"
+	return restored

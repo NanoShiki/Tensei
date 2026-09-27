@@ -7,6 +7,21 @@ const BATTLE_SCENE := "res://Scenes/Battle/battle.tscn"
 var active_character: Dictionary = {}
 var run: RefCounted
 var show_map := false
+var saves := preload("res://Scripts/Core/expedition_save.gd").new()
+
+func continue_exploration() -> bool:
+	var saved: Dictionary = saves.inspect()
+	if saved.is_empty(): return false
+	run = saved.run
+	active_character = run.character.duplicate(true)
+	show_map = true
+	_change_scene(BATTLE_SCENE)
+	return true
+
+func save_and_exit() -> bool:
+	if run == null or not saves.save_run(run): return false
+	return_to_menu()
+	return true
 
 func _ready() -> void:
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()

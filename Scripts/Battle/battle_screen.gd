@@ -324,6 +324,7 @@ func show_floor_map() -> void:
 	_label("地 下 城   /   路 线", Rect2(32, 18, 450, 42), 25, GOLD)
 	_label("第 %02d / %02d 层" % [run.floor_number, run.total_floors], Rect2(550, 20, 400, 40), 25)
 	_button("放弃并回主菜单", Rect2(1060, 22, 190, 40), _return_to_menu)
+	_button("保存并退出", Rect2(870, 22, 175, 40), _request_save_exit)
 	var returning: bool = run.phase == "returning"
 	var destination: Dictionary = run.return_target()
 	var return_keys: Array = []
@@ -388,10 +389,29 @@ func show_floor_map() -> void:
 		map_buttons[item.id] = button
 	_panel(Rect2(24, 540, 1232, 155))
 	_label("洛恩   /   生命 %d / %d    治疗药水 %d    灼烧药水 %d" % [run.character.hp, run.character.max_hp, run.character.potions, run.character.fire_potions], Rect2(48, 563, 1100, 36), 23, GOLD)
-	_label(run.message, Rect2(48, 619, 1150, 38), 20)
+	_label(run.message, Rect2(48, 619, 1150, 60), 20).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _begin_return() -> void:
 	if flow.run.begin_return(): show_floor_map()
+
+func _request_save_exit() -> void:
+	var saved: Dictionary = flow.saves.inspect()
+	if not saved.is_empty() and saved.run.run_id != flow.run.run_id:
+		var dialog := ConfirmationDialog.new()
+		dialog.title = "替换已有旅程？"
+		dialog.dialog_text = "保存当前旅程将替换“继续旅程”的存档。"
+		dialog.confirmed.connect(_save_exit)
+		dialog.confirmed.connect(dialog.queue_free)
+		dialog.canceled.connect(dialog.queue_free)
+		add_child(dialog)
+		dialog.popup_centered()
+	else:
+		_save_exit()
+
+func _save_exit() -> void:
+	if not flow.save_and_exit():
+		flow.run.message = flow.saves.message
+		show_floor_map()
 
 func _begin_descent() -> void:
 	if flow.run.begin_descent(): show_floor_map()
@@ -412,7 +432,7 @@ func _show_return_summary() -> void:
 	_label("最深抵达  第 %d 层     /     清理战斗  %d 场" % [summary.deepest_floor, summary.cleared_count], Rect2(285, 265, 720, 45), 24)
 	_label("剩余生命  %d / %d" % [hero.hp, hero.max_hp], Rect2(285, 330, 700, 38), 23)
 	_label("治疗药水  %d     /     灼烧药水  %d" % [hero.potions, hero.fire_potions], Rect2(285, 385, 700, 38), 23)
-	_label("本趟已结束。当前原型仅展示摘要，进度尚未保存。", Rect2(285, 450, 720, 35), 18, MUTED)
+	_label("本趟已结束。此页不覆盖手动存档，永久收益尚未接入。", Rect2(285, 450, 720, 35), 18, MUTED)
 	_button("返回主菜单", Rect2(465, 525, 350, 48), _return_to_menu, true)
 
 func _node_position(item: Dictionary) -> Vector2:
