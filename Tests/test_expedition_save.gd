@@ -98,51 +98,6 @@ func _run() -> void:
 	check(not store.save_run(run), "战斗未结算不允许保存")
 	run.finish_battle(run.character, false)
 	check(not store.save_run(run), "失败状态不覆盖安全点")
-	# 真实界面闭环，独立测试路径不触碰玩家存档。
-	var flow = root.get_node("GameFlow")
-	flow.saves.base_path = base + "-ui"
-	flow.start_exploration()
-	await process_frame
-	await process_frame
-	flow.run.enter("1a")
-	flow.run.finish_battle(flow.run.character, true)
-	flow.run.enter("2b")
-	flow.run.begin_return()
-	var checkpoint: Dictionary = flow.run.save_data()
-	current_scene._save_exit()
-	await process_frame
-	await process_frame
-	check(not current_scene.continue_button.disabled, "保存退出后菜单继续按钮启用")
-	# 清空会话引用，确保继续旅程真正从磁盘读入。
-	flow.run = null
-	current_scene.continue_button.pressed.emit()
-	await process_frame
-	await process_frame
-	check(flow.run.save_data() == checkpoint and current_scene.map_visible, "继续按钮恢复地图与全部状态")
-	check(current_scene.map_buttons["1a"].text.contains("已到访") and current_scene.map_buttons["3a"].text.contains("未知"), "恢复后保留到访和未知区域显示")
-	flow.run.setup(321)
-	current_scene.show_floor_map()
-	current_scene._request_save_exit()
-	var confirmation: ConfirmationDialog
-	for child in current_scene.get_children():
-		if child is ConfirmationDialog: confirmation = child
-	check(confirmation != null, "新远征替换存档前确认")
-	if confirmation != null: confirmation.canceled.emit()
-	check(flow.saves.inspect().run.save_data() == checkpoint, "取消替换保留旧旅程")
-	await process_frame
-	var replacement: Dictionary = flow.run.save_data()
-	current_scene._request_save_exit()
-	for child in current_scene.get_children():
-		if child is ConfirmationDialog: child.confirmed.emit()
-	await process_frame
-	await process_frame
-	check(flow.saves.inspect().run.save_data() == replacement, "确认替换保存新旅程")
-	current_scene.continue_button.pressed.emit()
-	await process_frame
-	await process_frame
-	flow.saves.base_path = base + "/missing/ui"
-	current_scene._save_exit()
-	check(current_scene.map_visible and flow.run.message.contains("保存失败"), "保存失败留在地图并显示原因")
 	for prefix in [base, base + "-ui"]:
 		for suffix in [".0.save", ".1.save", ".tmp"]:
 			if FileAccess.file_exists(prefix + suffix): DirAccess.remove_absolute(prefix + suffix)

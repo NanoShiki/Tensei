@@ -395,23 +395,12 @@ func _begin_return() -> void:
 	if flow.run.begin_return(): show_floor_map()
 
 func _request_save_exit() -> void:
-	var saved: Dictionary = flow.saves.inspect()
-	if not saved.is_empty() and saved.run.run_id != flow.run.run_id:
-		var dialog := ConfirmationDialog.new()
-		dialog.title = "替换已有旅程？"
-		dialog.dialog_text = "保存当前旅程将替换“继续旅程”的存档。"
-		dialog.confirmed.connect(_save_exit)
-		dialog.confirmed.connect(dialog.queue_free)
-		dialog.canceled.connect(dialog.queue_free)
-		add_child(dialog)
-		dialog.popup_centered()
-	else:
-		_save_exit()
-
-func _save_exit() -> void:
-	if not flow.save_and_exit():
-		flow.run.message = flow.saves.message
-		show_floor_map()
+	var browser := preload("res://Scripts/UI/save_browser.gd").new()
+	add_child(browser)
+	browser.saved.connect(func(record_id: String):
+		flow.active_record_id = record_id
+		flow.return_to_menu())
+	browser.open(flow.saves, flow.profile, flow.run)
 
 func _begin_descent() -> void:
 	if flow.run.begin_descent(): show_floor_map()

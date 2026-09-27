@@ -7,20 +7,24 @@ const BATTLE_SCENE := "res://Scenes/Battle/battle.tscn"
 var active_character: Dictionary = {}
 var run: RefCounted
 var show_map := false
-var saves := preload("res://Scripts/Core/expedition_save.gd").new()
+var saves := preload("res://Scripts/Core/save_library.gd").new()
+var profile: Dictionary = {}
+var active_record_id := ""
 
 func continue_exploration() -> bool:
 	var saved: Dictionary = saves.inspect()
 	if saved.is_empty(): return false
+	return load_exploration(saved.metadata.profile.id, saved.metadata.record_id)
+
+func load_exploration(profile_id: String, record_id: String) -> bool:
+	var saved: Dictionary = saves.load_record(profile_id, record_id)
+	if saved.is_empty(): return false
 	run = saved.run
+	profile = saved.metadata.profile.duplicate(true)
+	active_record_id = record_id
 	active_character = run.character.duplicate(true)
 	show_map = true
 	_change_scene(BATTLE_SCENE)
-	return true
-
-func save_and_exit() -> bool:
-	if run == null or not saves.save_run(run): return false
-	return_to_menu()
 	return true
 
 func _ready() -> void:
@@ -33,9 +37,11 @@ func start_battle(character_id: String) -> void:
 	active_character = CharacterLibrary.resolve(character_id)
 	_change_scene(BATTLE_SCENE)
 
-func start_exploration() -> void:
+func start_exploration(profile_name: String = "洛恩") -> void:
 	run = FloorRun.new()
 	run.setup(randi())
+	profile = saves.new_profile(profile_name)
+	active_record_id = ""
 	active_character = run.character.duplicate(true)
 	show_map = true
 	_change_scene(BATTLE_SCENE)

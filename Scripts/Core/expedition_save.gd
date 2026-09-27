@@ -24,9 +24,12 @@ func _read(path: String) -> Dictionary:
 	if not data.get("generation") is int or data.generation < 1: return {"invalid": true}
 	if not data.get("payload") is PackedByteArray or not data.get("checksum") is String: return {"invalid": true}
 	if _checksum(data.payload) != data.checksum: return {"invalid": true}
-	var restored := Run.from_save(bytes_to_var(data.payload))
+	var snapshot: Variant = bytes_to_var(data.payload)
+	var restored := Run.from_save(snapshot)
 	if restored == null: return {"invalid": true}
-	return {"generation": data.generation, "run": restored, "path": path}
+	var metadata: Variant = snapshot.get("_save_meta", {})
+	if not metadata is Dictionary: return {"invalid": true}
+	return {"generation": data.generation, "run": restored, "path": path, "metadata": metadata}
 
 func inspect() -> Dictionary:
 	var best: Dictionary = {}
@@ -45,11 +48,12 @@ func inspect() -> Dictionary:
 		message = "一份存档无法读取，将恢复另一份完整存档。"
 	return best
 
-func save_run(run: RefCounted) -> bool:
+func save_run(run: RefCounted, metadata: Dictionary = {}) -> bool:
 	var snapshot: Dictionary = run.save_data()
 	if snapshot.is_empty():
 		message = "请在战斗结束后的探索地图保存。"
 		return false
+	if not metadata.is_empty(): snapshot["_save_meta"] = metadata.duplicate(true)
 	var previous := inspect()
 	if previous.is_empty() and message != "尚无可继续的旅程": return false
 	var generation: int = previous.get("generation", 0) + 1
