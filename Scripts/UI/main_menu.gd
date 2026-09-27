@@ -131,7 +131,7 @@ func _refresh_continue() -> void:
 	if saved.is_empty():
 		status.text = flow.saves.message
 	else:
-		status.text = "%s · 第 %d 层 · %d 步" % [str(saved.metadata.profile.name).left(12), saved.run.floor_number, saved.run.steps_taken]
+		status.text = "%s · %s" % [str(saved.metadata.profile.name).left(12), "城市整备" if saved.run.phase == "city" else "第 %d 层 · %d 步" % [saved.run.floor_number, saved.run.steps_taken]]
 		if not flow.saves.message.is_empty(): status.text += " · 使用恢复存档"
 
 func _continue_journey() -> void:
@@ -215,7 +215,7 @@ func _open_character() -> void:
 	content.add_child(profile_name)
 	content.add_child(_label("每个角色独立保存，可保留多条进度记录。", 15, Color(PAPER, 0.6)))
 	new_game_requested.emit("lorn")
-	_button("逐层探索    →", func(): get_node("/root/GameFlow").start_exploration(profile_name.text), content)
+	_button("进入城市    →", func(): get_node("/root/GameFlow").start_character(profile_name.text), content)
 	_button("战斗演示    →", _start_battle, content)
 	_button("返回", _close_modal, content).grab_focus()
 

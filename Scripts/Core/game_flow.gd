@@ -47,6 +47,11 @@ func start_exploration(profile_name: String = "洛恩") -> void:
 	show_map = true
 	_change_scene(BATTLE_SCENE)
 
+func start_character(profile_name: String = "洛恩") -> void:
+	start_exploration(profile_name)
+	run.phase = "city"
+	run.message = "欢迎来到城市。先从第一层出发，收集 3 铁片与 6 金币打造铁剑。"
+
 func return_to_menu() -> void:
 	_change_scene(MENU_SCENE)
 
