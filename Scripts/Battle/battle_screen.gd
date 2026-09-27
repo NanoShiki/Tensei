@@ -355,6 +355,8 @@ func show_floor_map() -> void:
 	var names := {"entry": "入口", "battle": "战斗", "rest": "营地 +10 HP", "cache": "补给 +1 药水", "exit": "本层出口"}
 	for item in run.nodes:
 		var return_here: bool = returning and item.key in return_keys
+		var enabled: bool = return_here if returning else run.can_enter(item.id)
+		var revealed: bool = item.visited or enabled
 		var position_text := "当前" if item.id == run.current else ("可返回" if return_here else ("可深入" if run.can_enter(item.id) else ""))
 		var visit_text := "已到访" if item.visited else "未到访"
 		var status: String = names[item.kind]
@@ -363,11 +365,13 @@ func show_floor_map() -> void:
 		elif item.kind == "rest" and item.reward_claimed: status = "营地 · 已休整"
 		elif item.kind == "cache" and item.reward_claimed: status = "补给 · 已领取"
 		var title: String = (position_text + " · " if not position_text.is_empty() else "") + visit_text + "\n" + status
+		if not revealed: title = "未到访\n未知"
 		var callback: Callable = _return_step.bind(str(item.key)) if returning else _enter_node.bind(str(item.id))
-		var enabled: bool = return_here if returning else run.can_enter(item.id)
 		var button := _button(title, Rect2(_node_position(item), Vector2(148, 68)), callback, enabled)
 		button.disabled = not enabled
-		if item.kind == "battle":
+		if not revealed:
+			button.tooltip_text = "靠近至下一步可选节点后显示详情；已到访节点保留详情。"
+		if revealed and item.kind == "battle":
 			button.tooltip_text = "每次合法移动先扣一步，再检查目的地。" + ("此处剩 1 步，进入时将遇敌。" if item.respawn_in == 1 and not item.enemy_active else "停留、预览和战斗回合不推进刷新。")
 			if item.cleared:
 				var progress := ColorRect.new()
