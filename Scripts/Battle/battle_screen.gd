@@ -21,6 +21,7 @@ var flow: Node
 var _settled := false
 var map_buttons: Dictionary = {}
 var expedition_button: Button
+var direction_button: Button
 
 func _ready() -> void:
 	add_to_group("gm_battle_context")
@@ -48,6 +49,7 @@ func _clear() -> void:
 	targets.clear()
 	map_buttons.clear()
 	expedition_button = null
+	direction_button = null
 
 func _panel(rect: Rect2, color: Color = Color("182326"), border: Color = Color("3d4a48")) -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -326,16 +328,19 @@ func show_floor_map() -> void:
 	var destination: Dictionary = run.return_target()
 	var return_keys: Array = []
 	for choice in run.return_targets(): return_keys.append(choice.key)
-	_label("返程 · 沿向上连线自由选择路线" if returning else "下潜 · 沿连线前进，也可随时开始返程", Rect2(40, 100, 1150, 38), 21, GOLD)
-	_label("已移动 %d 步 · 每步刷新倒计时 -1；停留与战斗不计步。" % run.steps_taken, Rect2(40, 145, 770, 34), 17, MUTED)
+	_label("向上返回 · 可随时转向深入" if returning else "继续深入 · 可随时转向返回", Rect2(40, 100, 740, 38), 21, GOLD)
+	_label("已移动 %d 步 · 每步刷新倒计时 -1；切换方向与停留不计步。" % run.steps_taken, Rect2(40, 145, 810, 34), 17, MUTED)
+	direction_button = _button("继续深入" if returning else "向上返回", Rect2(860, 96, 260, 40), _begin_descent if returning else _begin_return, true)
+	direction_button.disabled = not (run.can_begin_descent() if returning else run.can_begin_return())
 	if returning and not destination.is_empty():
 		var action := "回到城市" if destination.id == "city" else "返回第 %d 层" % destination.floor
 		expedition_button = _button(action, Rect2(880, 144, 350, 42), _return_step.bind(str(destination.key)), true)
 	elif returning:
-		_label("请选择高亮的返程节点", Rect2(880, 144, 350, 42), 20, GOLD)
+		_label("请选择高亮的向上节点", Rect2(880, 144, 350, 42), 20, GOLD)
+	elif run.can_descend_floor():
+		expedition_button = _button("进入第 %d 层" % (run.floor_number + 1), Rect2(880, 144, 350, 42), _descend_floor.bind(int(run.floor_number)), true)
 	else:
-		expedition_button = _button("开始返程", Rect2(980, 144, 250, 42), _begin_return, true)
-		expedition_button.disabled = not run.can_begin_return()
+		expedition_button = direction_button
 	for item in run.nodes:
 		for next_id in item.next:
 			var line := Line2D.new()
@@ -349,14 +354,15 @@ func show_floor_map() -> void:
 			canvas.add_child(line)
 	var names := {"entry": "入口", "battle": "战斗", "rest": "营地 +10 HP", "cache": "补给 +1 药水", "exit": "本层出口"}
 	for item in run.nodes:
-		var title: String = names[item.kind]
-		if item.id == run.current: title = "当前位置\n" + title
-		elif item.done: title = "已完成\n" + title
 		var return_here: bool = returning and item.key in return_keys
-		if return_here: title = "可选返程\n" + names[item.kind]
+		var position_text := "当前" if item.id == run.current else ("可返回" if return_here else ("可深入" if run.can_enter(item.id) else ""))
+		var visit_text := "已到访" if item.visited else "未到访"
+		var status: String = names[item.kind]
 		if item.kind == "battle":
-			var status: String = "怪物在场" if item.enemy_active else "刷新还需 %d 步" % item.respawn_in
-			title = ("当前位置\n" if item.id == run.current else ("可选返程\n" if return_here else "")) + status
+			status = "怪物在场" if item.enemy_active else "刷新还需 %d 步" % item.respawn_in
+		elif item.kind == "rest" and item.reward_claimed: status = "营地 · 已休整"
+		elif item.kind == "cache" and item.reward_claimed: status = "补给 · 已领取"
+		var title: String = (position_text + " · " if not position_text.is_empty() else "") + visit_text + "\n" + status
 		var callback: Callable = _return_step.bind(str(item.key)) if returning else _enter_node.bind(str(item.id))
 		var enabled: bool = return_here if returning else run.can_enter(item.id)
 		var button := _button(title, Rect2(_node_position(item), Vector2(148, 68)), callback, enabled)
@@ -382,6 +388,12 @@ func show_floor_map() -> void:
 
 func _begin_return() -> void:
 	if flow.run.begin_return(): show_floor_map()
+
+func _begin_descent() -> void:
+	if flow.run.begin_descent(): show_floor_map()
+
+func _descend_floor(level: int) -> void:
+	if flow.run.descend_floor(level): show_floor_map()
 
 func _return_step(key: String) -> void:
 	if flow.run.step_return(key):

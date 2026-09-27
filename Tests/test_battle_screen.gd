@@ -71,6 +71,12 @@ func _run() -> void:
 	var before_return: Dictionary = flow.run.character.duplicate(true)
 	screen.expedition_button.pressed.emit()
 	check(flow.run.phase == "returning" and not screen.map_buttons["1a"].disabled, "返程按钮启动并高亮上一节点")
+	var direction_steps: int = flow.run.steps_taken
+	screen.direction_button.pressed.emit()
+	check(flow.run.phase == "descending" and not screen.map_buttons["3a"].disabled, "继续深入按钮重新启用向下节点")
+	check(screen.map_buttons["1a"].text.contains("已到访") and screen.map_buttons["1b"].text.contains("未到访"), "怪物状态之外保留到访标记")
+	screen.direction_button.pressed.emit()
+	check(flow.run.phase == "returning" and flow.run.steps_taken == direction_steps, "实际按钮反复切方向不计步")
 	check(screen.map_buttons["3a"].disabled and not screen.map_buttons["1b"].disabled, "返程禁止下潜，允许未选的上行分支")
 	screen.map_buttons["1a"].pressed.emit()
 	check(flow.run.current == "1a" and flow.run.pending.is_empty(), "返程点击战斗节点直接通过")

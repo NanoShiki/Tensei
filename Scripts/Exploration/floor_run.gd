@@ -89,7 +89,7 @@ func node(id: String) -> Dictionary:
 	return {}
 
 func can_enter(id: String) -> bool:
-	return phase == "descending" and not completed and not failed and pending.is_empty() and character.hp > 0 and id in node(current).get("next", []) and not node(id).get("done", true)
+	return phase == "descending" and not failed and pending.is_empty() and character.hp > 0 and id in node(current).get("next", []) and not node(id).is_empty()
 
 func _advance_step() -> void:
 	steps_taken += 1
@@ -131,10 +131,28 @@ func enter(id: String) -> String:
 			completed = true
 			message = "已抵达最深层出口。可以选择返程路线返回城市。"
 		else:
-			floor_number += 1
-			generate_floor()
+			_load_floor(floor_number + 1)
 			message = "抵达第 %d 层，生命与药水延续。" % floor_number
 	return result
+
+func _load_floor(level: int) -> void:
+	floor_number = level
+	if _floors.has(level):
+		nodes = _floors[level]
+		current = "entry"
+		route.append(node_key(level, "entry"))
+	else:
+		generate_floor()
+
+func can_descend_floor() -> bool:
+	return phase == "descending" and current == "exit" and floor_number < total_floors and pending.is_empty() and not failed and character.hp > 0
+
+func descend_floor(expected_floor: int) -> bool:
+	if not can_descend_floor() or floor_number != expected_floor: return false
+	_advance_step()
+	_load_floor(floor_number + 1)
+	message = "抵达第 %d 层，保留原地图与探索状态。" % floor_number
+	return true
 
 func finish_battle(hero: Dictionary, victory: bool) -> bool:
 	if pending.is_empty(): return false
@@ -168,6 +186,15 @@ func begin_return() -> bool:
 	phase = "returning"
 	return_route.append(node(current).key)
 	message = "已开始返程。沿向上连线自由选路，每走一步推进怪物刷新。"
+	return true
+
+func can_begin_descent() -> bool:
+	return phase == "returning" and not failed and pending.is_empty() and character.hp > 0
+
+func begin_descent() -> bool:
+	if not can_begin_descent(): return false
+	phase = "descending"
+	message = "已转向深入。可以沿连线再次经过已到访节点。"
 	return true
 
 func return_targets() -> Array[Dictionary]:
