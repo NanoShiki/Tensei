@@ -59,6 +59,11 @@ func _run() -> void:
 	root.add_child(screen)
 	await process_frame
 	check(screen.map_visible, "地图入口")
+	for id in ["1a", "1b"]:
+		check(screen.map_buttons[id].text.contains("怪物在场"), "入口只揭示下一步分支")
+	for id in ["2a", "2b", "3a", "3b", "exit"]:
+		check(screen.map_buttons[id].text == "未到访\n未知" and screen.map_buttons[id].disabled, "远处节点隐藏类型和状态")
+		check(not screen.map_buttons[id].tooltip_text.contains("刷新"), "远处悬停不透露怪物状态")
 	screen._enter_node("1a")
 	await create_timer(1.1).timeout
 	check(not screen.map_visible and flow.run.pending == "1a", "地图节点进入战斗")
@@ -67,6 +72,46 @@ func _run() -> void:
 	screen._settle()
 	screen.show_floor_map()
 	check(flow.run.current == "1a" and flow.run.pending == "" and screen.map_visible, "胜利返回同层进度")
+	check(screen.map_buttons["2b"].text.contains("营地") and screen.map_buttons["3a"].text.contains("未知"), "靠近后揭示下一步营地，远处继续隐藏")
+	check(screen.map_buttons["1b"].text.contains("未知"), "曾靠近但未到访的分支离开后隐藏")
+	check(screen.map_buttons["1a"].text.contains("刷新还需"), "已探索怪物显示刷新倒计时")
+	screen.map_buttons["2b"].pressed.emit()
+	var before_return: Dictionary = flow.run.character.duplicate(true)
+	screen.expedition_button.pressed.emit()
+	check(flow.run.phase == "returning" and not screen.map_buttons["1a"].disabled, "返程按钮启动并高亮上一节点")
+	check(screen.map_buttons["1b"].text.contains("怪物在场") and screen.map_buttons["3a"].text.contains("未知"), "返回时揭示下一步上行分支，隐藏未到访下行分支")
+	var direction_steps: int = flow.run.steps_taken
+	screen.direction_button.pressed.emit()
+	check(flow.run.phase == "descending" and not screen.map_buttons["3a"].disabled, "继续深入按钮重新启用向下节点")
+	check(not screen.map_buttons["3a"].text.contains("未知") and screen.map_buttons["1b"].text.contains("未知"), "切换方向同步更新未到访节点详情")
+	check(screen.map_buttons["1a"].text.contains("已到访") and screen.map_buttons["1b"].text.contains("未到访"), "怪物状态之外保留到访标记")
+	screen.direction_button.pressed.emit()
+	check(flow.run.phase == "returning" and flow.run.steps_taken == direction_steps, "实际按钮反复切方向不计步")
+	check(screen.map_buttons["3a"].disabled and not screen.map_buttons["1b"].disabled, "返程禁止下潜，允许未选的上行分支")
+	screen.map_buttons["1a"].pressed.emit()
+	check(flow.run.current == "1a" and flow.run.pending.is_empty(), "返程点击战斗节点直接通过")
+	screen.expedition_button.pressed.emit()
+	check(flow.run.current == "entry" and screen.expedition_button.text == "回到城市", "入口显示回城操作")
+	screen.expedition_button.pressed.emit()
+	check(flow.run.phase == "returned" and screen.map_buttons.is_empty(), "回城摘要替代地图")
+	check(flow.run.return_summary().character == before_return, "界面返程不重复领资源")
+	flow.run.setup(123)
+	flow.run.enter("1a")
+	flow.run.finish_battle(flow.run.character, true)
+	flow.run.enter("2b")
+	screen.show_floor_map()
+	var countdown: int = flow.run.node("1a").respawn_in
+	await create_timer(0.2).timeout
+	check(flow.run.node("1a").respawn_in == countdown, "真实等待不扣刷新步数")
+	screen.expedition_button.pressed.emit()
+	screen.map_buttons["1b"].pressed.emit()
+	await create_timer(1.1).timeout
+	check(not screen.map_visible and flow.run.pending == "1b", "返程选择未走分支实际进入战斗界面")
+	screen.battle.enemy.hp = 0
+	screen.battle._check_outcome()
+	screen._settle()
+	screen.show_floor_map()
+	check(flow.run.phase == "returning" and flow.run.current == "1b" and not screen.map_buttons["entry"].disabled, "返程遇敌胜利后继续返回入口")
 	screen.size = Vector2(960, 540)
 	screen._layout()
 	check(is_equal_approx(screen.canvas.scale.x, 0.75), "小窗口完整缩放")

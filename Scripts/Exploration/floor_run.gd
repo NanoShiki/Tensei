@@ -13,6 +13,13 @@ var current := "entry"
 var pending := ""
 var completed := false
 var failed := false
+var phase := "descending"
+var deepest_floor := 1
+var steps_taken := 0
+var battles_won := 0
+var return_route: Array[String] = []
+var _locations: Dictionary = {}
+var _summary: Dictionary = {}
 var character: Dictionary = CharacterLibrary.resolve()
 var message := "沿连线选择下一个节点。每层拥有独立路线。"
 
@@ -23,6 +30,13 @@ func setup(run_seed: int, count: int = 30, expedition_id: String = "") -> void:
 	floor_number = 1
 	completed = false
 	failed = false
+	phase = "descending"
+	deepest_floor = 1
+	steps_taken = 0
+	battles_won = 0
+	return_route.clear()
+	_locations.clear()
+	_summary.clear()
 	_floors.clear()
 	route.clear()
 	nodes = []
@@ -53,7 +67,13 @@ func generate_floor() -> void:
 		item["visited"] = item.id == "entry"
 		item["cleared"] = false
 		item["reward_claimed"] = false
+		item["enemy_active"] = item.kind == "battle"
+		item["respawn_in"] = 0
+		item["respawn_total"] = 0
+		item["clear_count"] = 0
+		_locations[item.key] = {"key": item.key, "floor": floor_number, "id": item.id}
 	_floors[floor_number] = nodes
+	deepest_floor = maxi(deepest_floor, floor_number)
 	route.append(node_key(floor_number, "entry"))
 
 func node_key(level: int, id: String) -> String:
@@ -69,35 +89,70 @@ func node(id: String) -> Dictionary:
 	return {}
 
 func can_enter(id: String) -> bool:
-	return not completed and not failed and pending.is_empty() and character.hp > 0 and id in node(current).get("next", []) and not node(id).get("done", true)
+	return phase == "descending" and not failed and pending.is_empty() and character.hp > 0 and id in node(current).get("next", []) and not node(id).is_empty()
 
-func enter(id: String) -> String:
-	if not can_enter(id): return ""
-	var item := node(id)
+func _advance_step() -> void:
+	steps_taken += 1
+	for level_nodes in _floors.values():
+		for item in level_nodes:
+			if item.kind == "battle" and not item.enemy_active and item.respawn_in > 0:
+				item.respawn_in -= 1
+				if item.respawn_in == 0: item.enemy_active = true
+
+func _arrive(item: Dictionary) -> String:
 	item.visited = true
-	if item.kind == "battle":
-		pending = id
+	if item.kind == "battle" and item.enemy_active:
+		pending = item.id
 		return "battle"
 	item.done = true
-	current = id
-	route.append(item.key)
-	if item.kind == "rest":
+	current = item.id
+	_record_position(item.key)
+	if item.kind == "rest" and not item.reward_claimed:
 		item.reward_claimed = true
 		character.hp = mini(character.max_hp, character.hp + 10)
 		message = "营地休整：恢复 10 生命。"
-	elif item.kind == "cache":
+	elif item.kind == "cache" and not item.reward_claimed:
 		item.reward_claimed = true
 		character.potions += 1
 		message = "找到补给：获得 1 瓶治疗药水。"
-	elif item.kind == "exit":
+	return str(item.kind)
+
+func _record_position(key: String) -> void:
+	if phase == "returning": return_route.append(key)
+	else: route.append(key)
+
+func enter(id: String) -> String:
+	if not can_enter(id): return ""
+	_advance_step()
+	var item := node(id)
+	var result := _arrive(item)
+	if item.kind == "exit":
 		if floor_number == total_floors:
 			completed = true
-			message = "已完成本次探索的全部楼层。"
+			message = "已抵达最深层出口。可以选择返程路线返回城市。"
 		else:
-			floor_number += 1
-			generate_floor()
+			_load_floor(floor_number + 1)
 			message = "抵达第 %d 层，生命与药水延续。" % floor_number
-	return str(item.kind)
+	return result
+
+func _load_floor(level: int) -> void:
+	floor_number = level
+	if _floors.has(level):
+		nodes = _floors[level]
+		current = "entry"
+		route.append(node_key(level, "entry"))
+	else:
+		generate_floor()
+
+func can_descend_floor() -> bool:
+	return phase == "descending" and current == "exit" and floor_number < total_floors and pending.is_empty() and not failed and character.hp > 0
+
+func descend_floor(expected_floor: int) -> bool:
+	if not can_descend_floor() or floor_number != expected_floor: return false
+	_advance_step()
+	_load_floor(floor_number + 1)
+	message = "抵达第 %d 层，保留原地图与探索状态。" % floor_number
+	return true
 
 func finish_battle(hero: Dictionary, victory: bool) -> bool:
 	if pending.is_empty(): return false
@@ -106,10 +161,77 @@ func finish_battle(hero: Dictionary, victory: bool) -> bool:
 		current = pending
 		node(current).done = true
 		node(current).cleared = true
-		route.append(node(current).key)
-		message = "战斗胜利。选择下一段路线。"
+		var item := node(current)
+		item.enemy_active = false
+		item.clear_count += 1
+		battles_won += 1
+		var random := RandomNumberGenerator.new()
+		random.seed = seed_value + floor_number * 997 + int(item.step) * 101 + int(item.lane) * 17 + int(item.clear_count) * 7919
+		item.respawn_total = random.randi_range(3, 5)
+		item.respawn_in = item.respawn_total
+		_record_position(item.key)
+		message = "战斗胜利。此处怪物将在再走 %d 步后刷新。" % item.respawn_in
 	else:
 		failed = true
+		phase = "failed"
 		message = "探索失败。返回主菜单可开始新旅程。"
 	pending = ""
 	return true
+
+func can_begin_return() -> bool:
+	return phase == "descending" and not failed and pending.is_empty() and character.hp > 0 and not route.is_empty()
+
+func begin_return() -> bool:
+	if not can_begin_return(): return false
+	phase = "returning"
+	return_route.append(node(current).key)
+	message = "已开始返程。沿向上连线自由选路，每走一步推进怪物刷新。"
+	return true
+
+func can_begin_descent() -> bool:
+	return phase == "returning" and not failed and pending.is_empty() and character.hp > 0
+
+func begin_descent() -> bool:
+	if not can_begin_descent(): return false
+	phase = "descending"
+	message = "已转向深入。可以沿连线再次经过已到访节点。"
+	return true
+
+func return_targets() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	if phase != "returning" or not pending.is_empty() or character.hp <= 0: return result
+	if current == "entry":
+		if floor_number == 1:
+			result.append({"key": run_id + "/city", "floor": 0, "id": "city"})
+		else:
+			result.append(_locations[node_key(floor_number - 1, "exit")].duplicate(true))
+	else:
+		for item in nodes:
+			if current in item.next:
+				result.append(_locations[item.key].duplicate(true))
+	return result
+
+func return_target() -> Dictionary:
+	# 仅有一个出口时用于跨层、回城快捷按钮；分叉由玩家点选。
+	var choices := return_targets()
+	return choices[0] if choices.size() == 1 else {}
+
+func step_return(expected_key: String) -> bool:
+	var target: Dictionary = {}
+	for choice in return_targets():
+		if choice.key == expected_key: target = choice
+	if target.is_empty(): return false
+	_advance_step()
+	if target.id == "city":
+		phase = "returned"
+		_summary = {"run_id": run_id, "deepest_floor": deepest_floor, "cleared_count": battles_won, "character": character.duplicate(true)}
+		message = "已安全回城。本趟探索结束。"
+		return true
+	floor_number = target.floor
+	nodes = _floors[floor_number]
+	message = "返程中：选择向上的连线，注意怪物剩余刷新步数。"
+	_arrive(node(target.id))
+	return true
+
+func return_summary() -> Dictionary:
+	return _summary.duplicate(true)
