@@ -1,5 +1,6 @@
 extends RefCounted
 
+const Log = preload("res://Scripts/Core/game_log.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 var floor_number := 1
 var total_floors := 30
@@ -122,6 +123,13 @@ func _record_position(key: String) -> void:
 	else: route.append(key)
 
 func enter(id: String) -> String:
+	var before := log_state()
+	var result := _enter(id)
+	Log.context["run_id"] = run_id
+	Log.event("exploration", "enter", {"input": {"id": id}, "success": not result.is_empty(), "before": before, "after": log_state()}, "INFO" if not result.is_empty() else "WARN")
+	return result
+
+func _enter(id: String) -> String:
 	if not can_enter(id): return ""
 	_advance_step()
 	var item := node(id)
@@ -148,6 +156,13 @@ func can_descend_floor() -> bool:
 	return phase == "descending" and current == "exit" and floor_number < total_floors and pending.is_empty() and not failed and character.hp > 0
 
 func descend_floor(expected_floor: int) -> bool:
+	var before := log_state()
+	var result := _descend_floor(expected_floor)
+	Log.context["run_id"] = run_id
+	Log.event("exploration", "descend_floor", {"input": {"expected_floor": expected_floor}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _descend_floor(expected_floor: int) -> bool:
 	if not can_descend_floor() or floor_number != expected_floor: return false
 	_advance_step()
 	_load_floor(floor_number + 1)
@@ -155,6 +170,13 @@ func descend_floor(expected_floor: int) -> bool:
 	return true
 
 func finish_battle(hero: Dictionary, victory: bool) -> bool:
+	var before := log_state()
+	var result := _finish_battle(hero, victory)
+	Log.context["run_id"] = run_id
+	Log.event("exploration", "finish_battle", {"input": {"hero": hero, "victory": victory}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _finish_battle(hero: Dictionary, victory: bool) -> bool:
 	if pending.is_empty(): return false
 	character = hero.duplicate(true)
 	if victory:
@@ -184,6 +206,13 @@ func can_begin_return() -> bool:
 	return phase == "descending" and not failed and pending.is_empty() and character.hp > 0 and not route.is_empty()
 
 func begin_return() -> bool:
+	var before := log_state()
+	var result := _begin_return()
+	Log.context["run_id"] = run_id
+	Log.event("exploration", "begin_return", {"input": {}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _begin_return() -> bool:
 	if not can_begin_return(): return false
 	phase = "returning"
 	return_route.append(node(current).key)
@@ -194,6 +223,13 @@ func can_begin_descent() -> bool:
 	return phase == "returning" and not failed and pending.is_empty() and character.hp > 0
 
 func begin_descent() -> bool:
+	var before := log_state()
+	var result := _begin_descent()
+	Log.context["run_id"] = run_id
+	Log.event("exploration", "begin_descent", {"input": {}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _begin_descent() -> bool:
 	if not can_begin_descent(): return false
 	phase = "descending"
 	message = "已转向深入。可以沿连线再次经过已到访节点。"
@@ -219,6 +255,13 @@ func return_target() -> Dictionary:
 	return choices[0] if choices.size() == 1 else {}
 
 func step_return(expected_key: String) -> bool:
+	var before := log_state()
+	var result := _step_return(expected_key)
+	Log.context["run_id"] = run_id
+	Log.event("exploration", "step_return", {"input": {"expected_key": expected_key}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _step_return(expected_key: String) -> bool:
 	var target: Dictionary = {}
 	for choice in return_targets():
 		if choice.key == expected_key: target = choice
@@ -239,12 +282,26 @@ func return_summary() -> Dictionary:
 	return _summary.duplicate(true)
 
 func enter_city() -> bool:
+	var before := log_state()
+	var result := _enter_city()
+	Log.context["run_id"] = run_id
+	Log.event("exploration", "enter_city", {"input": {}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _enter_city() -> bool:
 	if phase != "returned": return false
 	phase = "city"
 	message = "已回到城市。战利品随身保留，可休整、补给或打造铁剑。"
 	return true
 
 func city_service(action: String) -> bool:
+	var before := log_state()
+	var result := _city_service(action)
+	Log.context["run_id"] = run_id
+	Log.event("exploration", "city_service", {"input": {"action": action}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _city_service(action: String) -> bool:
 	if phase != "city": return false
 	match action:
 		"rest":
@@ -266,6 +323,13 @@ func city_service(action: String) -> bool:
 	return true
 
 func depart_city(next_seed: int) -> bool:
+	var before := log_state()
+	var result := _depart_city(next_seed)
+	Log.context["run_id"] = run_id
+	Log.event("exploration", "depart_city", {"input": {"next_seed": next_seed}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	return result
+
+func _depart_city(next_seed: int) -> bool:
 	if phase != "city" or character.hp <= 0: return false
 	var prepared := character.duplicate(true)
 	setup(next_seed, total_floors)
@@ -345,3 +409,12 @@ static func from_save(data: Variant) -> RefCounted:
 	restored.return_route.assign(data.return_route)
 	restored.message = "已恢复旅程。楼层、到访记录与刷新步数保持保存时的状态。"
 	return restored
+
+func log_state() -> Dictionary:
+	var timers: Dictionary = {}
+	for items in _floors.values():
+		for item in items:
+			if item.clear_count > 0: timers[item.key] = {"remaining": item.respawn_in, "active": item.enemy_active}
+	return {"run_id": run_id, "seed": seed_value, "floor": floor_number, "node": current,
+		"pending": pending, "phase": phase, "steps": steps_taken, "wins": battles_won,
+		"hero": character.duplicate(true), "respawn": timers, "message": message}

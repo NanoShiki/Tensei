@@ -2,6 +2,7 @@ extends Window
 
 signal load_requested(profile_id: String, record_id: String)
 signal saved(record_id: String)
+signal records_changed
 
 var library: RefCounted
 var run: RefCounted
@@ -15,6 +16,7 @@ var name_input: LineEdit
 var save_button: Button
 var back_button: Button
 var list_buttons: Array[Button] = []
+var delete_buttons: Array[Button] = []
 var _committing := false
 
 func open(store: RefCounted, character: Dictionary = {}, expedition: RefCounted = null) -> void:
@@ -81,6 +83,7 @@ func _clear_rows() -> void:
 		rows.remove_child(child)
 		child.queue_free()
 	list_buttons.clear()
+	delete_buttons.clear()
 	feedback.text = ""
 
 func _show_profiles() -> void:
@@ -128,11 +131,40 @@ func _show_records(profile_id: String) -> void:
 					name_input.text = meta.name
 					feedback.text = "已选择覆盖：" + meta.name
 					_update_save_button()
-		var button := _button(text, callback, rows)
+		var row := HBoxContainer.new()
+		rows.add_child(row)
+		var button := _button(text, callback, row)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.disabled = record.has("error") or (run != null and record.record_id == "legacy")
 		list_buttons.append(button)
-	if records.is_empty(): feedback.text = "首次保存将建立该角色档案及第一条记录。"
+		var delete_button := _button("删除", _request_delete.bind(profile_id, str(record.record_id), str(record.get("metadata", {}).get("name", record.record_id))), row)
+		delete_button.custom_minimum_size.x = 72
+		delete_buttons.append(delete_button)
+	if records.is_empty(): feedback.text = "首次保存将建立该角色档案及第一条记录。" if run != null else "此角色已无记录，可返回角色列表。"
 	if run != null: _update_save_button()
+
+func _request_delete(profile_id: String, record_id: String, label: String) -> void:
+	var confirmation := ConfirmationDialog.new()
+	confirmation.title = "删除存档记录？"
+	confirmation.ok_button_text = "删除"
+	confirmation.cancel_button_text = "取消"
+	confirmation.dialog_text = "记录：%s\n删除此记录及其两代备份，无法撤销。其他记录保留。\n删除最后一条记录后，该角色将从读取列表消失。" % label
+	confirmation.confirmed.connect(func(): _delete_confirmed.call_deferred(profile_id, record_id))
+	confirmation.confirmed.connect(confirmation.queue_free)
+	confirmation.canceled.connect(confirmation.queue_free)
+	add_child(confirmation)
+	confirmation.popup_centered()
+
+func _delete_confirmed(profile_id: String, record_id: String) -> void:
+	if library.delete_record(profile_id, record_id):
+		var result: String = library.message
+		if selected_id == record_id:
+			selected_id = ""
+			selected_name = ""
+		_show_records(profile_id)
+		feedback.text = result
+		records_changed.emit()
+	else: feedback.text = library.message
 
 func _update_save_button() -> void:
 	save_button.text = "新增记录并退出" if selected_id.is_empty() else "覆盖所选记录并退出"

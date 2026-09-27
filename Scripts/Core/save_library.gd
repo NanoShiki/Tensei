@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Store = preload("res://Scripts/Core/expedition_save.gd")
+const Log = preload("res://Scripts/Core/game_log.gd")
 var base_path := "user://expedition"
 var message := ""
 
@@ -28,6 +29,9 @@ func read_record(profile_id: String, record_id: String) -> Dictionary:
 		message = "无效的角色或存档标识。"
 		return {}
 	var store := _store(profile_id, record_id)
+	if FileAccess.file_exists(store.base_path + ".deleted"):
+		message = "记录已删除。"
+		return {}
 	var record: Dictionary = store.inspect()
 	message = store.message
 	if record.is_empty(): return {}
@@ -58,6 +62,7 @@ func list_records(profile_id: String) -> Array[Dictionary]:
 	if profile_id == "legacy" and (FileAccess.file_exists(base_path + ".0.save") or FileAccess.file_exists(base_path + ".1.save")):
 		ids["legacy"] = true
 	for record_id in ids:
+		if FileAccess.file_exists(_store(profile_id, record_id).base_path + ".deleted"): continue
 		var record := read_record(profile_id, record_id)
 		if record.is_empty(): record = {"error": message}
 		record["profile_id"] = profile_id
@@ -111,7 +116,10 @@ func inspect() -> Dictionary:
 		var profile_id: Variant = config.get_value("recent", "profile", "")
 		var record_id: Variant = config.get_value("recent", "record", "")
 		if profile_id is String and record_id is String:
-			return read_record(profile_id, record_id)
+			if _valid_id(profile_id) and _valid_id(record_id):
+				var path: String = _store(profile_id, record_id).base_path
+				if not FileAccess.file_exists(path + ".deleted") and (FileAccess.file_exists(path + ".0.save") or FileAccess.file_exists(path + ".1.save")):
+					return read_record(profile_id, record_id)
 	var newest: Dictionary = {}
 	var failure := "尚无可继续的旅程"
 	for profile in list_profiles():
@@ -126,9 +134,49 @@ func inspect() -> Dictionary:
 func load_record(profile_id: String, record_id: String) -> Dictionary:
 	var record := read_record(profile_id, record_id)
 	if not record.is_empty(): _remember(profile_id, record_id)
+	Log.event("save", "load", {"profile_id": profile_id, "record_id": record_id, "success": not record.is_empty(), "message": message}, "WARN" if record.is_empty() else "INFO")
 	return record
 
+func delete_record(profile_id: String, record_id: String) -> bool:
+	var success := _delete_record(profile_id, record_id)
+	Log.event("save", "delete", {"profile_id": profile_id, "record_id": record_id, "success": success, "message": message}, "INFO" if success else "ERROR")
+	return success
+
+func _delete_record(profile_id: String, record_id: String) -> bool:
+	if not _valid_id(profile_id) or not _valid_id(record_id):
+		message = "删除失败：无效的角色或记录标识。"
+		return false
+	var path: String = _store(profile_id, record_id).base_path
+	if not FileAccess.file_exists(path + ".0.save") and not FileAccess.file_exists(path + ".1.save"):
+		message = "删除失败：记录已不存在。"
+		return false
+	# 先持久化删除标记，避免两代只删除一份或中断后旧进度复活。
+	var marker := FileAccess.open(path + ".delete.tmp", FileAccess.WRITE)
+	if marker == null:
+		message = "删除失败：无法写入删除标记，原记录保留。"
+		return false
+	marker.store_string("deleted")
+	marker.flush()
+	var error := marker.get_error()
+	marker.close()
+	if error == OK: error = DirAccess.rename_absolute(path + ".delete.tmp", path + ".deleted")
+	if error != OK:
+		DirAccess.remove_absolute(path + ".delete.tmp")
+		message = "删除失败：无法提交删除标记，请检查磁盘。"
+		return false
+	var cleaned := true
+	for suffix in [".0.save", ".1.save", ".tmp"]:
+		if FileAccess.file_exists(path + suffix) and DirAccess.remove_absolute(path + suffix) != OK: cleaned = false
+	if cleaned: DirAccess.remove_absolute(path + ".deleted")
+	message = "记录已删除。" if cleaned else "记录已移出列表；部分文件无法清理，删除标记已保留。"
+	return true
+
 func save_record(run: RefCounted, profile: Dictionary, label: String, record_id: String = "") -> String:
+	var result := _save_record(run, profile, label, record_id)
+	Log.event("save", "write", {"profile_id": profile.get("id", ""), "record_id": result if not result.is_empty() else record_id, "overwrite": not record_id.is_empty(), "success": not result.is_empty(), "message": message, "state": run.log_state() if run != null else {}}, "INFO" if not result.is_empty() else "ERROR")
+	return result
+
+func _save_record(run: RefCounted, profile: Dictionary, label: String, record_id: String = "") -> String:
 	message = ""
 	if not profile.get("id") is String or not _valid_id(profile.id) or not profile.get("name") is String or profile.get("character_id") != "lorn":
 		message = "请先创建或读取一个角色档案。"

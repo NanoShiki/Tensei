@@ -66,6 +66,7 @@ func _ready() -> void:
 	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(feedback)
 	register_command("kill_enemy", "秒杀当前敌人", "立即获胜，并执行正常战斗结算。", _kill_enemy, _kill_reason)
+	register_command("open_logs", "打开日志目录", "查看业务事件 JSONL 与引擎 godot.log；反馈问题时附上本次日志。", func(): return OS.shell_open(ProjectSettings.globalize_path("user://logs")) == OK, func(): return "")
 	set_open(false)
 
 func is_open() -> bool:
@@ -117,6 +118,7 @@ func _execute(id: String) -> void:
 		feedback.text = reason
 		return
 	feedback.text = "执行成功。" if entry.execute.call() else "当前无法执行。"
+	preload("res://Scripts/Core/game_log.gd").event("gm", id, {"result": feedback.text})
 	refresh_commands()
 
 func _battle_context() -> Node:
