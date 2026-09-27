@@ -4,6 +4,7 @@ func _initialize() -> void:
 	_run.call_deferred()
 
 func _run() -> void:
+	root.get_node("GameFlow").saves.base_path = "user://test-menu-" + str(Time.get_ticks_usec())
 	var menu = load("res://Scenes/UI/main_menu.tscn").instantiate()
 	root.add_child(menu)
 	await process_frame

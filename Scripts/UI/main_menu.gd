@@ -13,6 +13,7 @@ var menu_column: VBoxContainer
 var caption: Label
 var status: Label
 var continue_button: Button
+var load_button: Button
 var start_button: Button
 var settings_button: Button
 var modal: PanelContainer
@@ -28,6 +29,7 @@ func _ready() -> void:
 	_build_theme()
 	_build_background()
 	_build_menu()
+	_refresh_continue()
 	apply_character_portrait()
 	_load_settings()
 	resized.connect(_layout)
@@ -108,9 +110,10 @@ func _build_menu() -> void:
 	var gap := Control.new()
 	gap.custom_minimum_size.y = 28
 	menu_column.add_child(gap)
-	continue_button = _button("继续旅程", func(): pass, menu_column)
+	continue_button = _button("继续旅程", _continue_journey, menu_column)
 	continue_button.disabled = true
 	continue_button.tooltip_text = "尚无可继续的旅程"
+	load_button = _button("读取存档", _open_saves, menu_column)
 	start_button = _button("开始旅程    →", _open_character, menu_column)
 	settings_button = _button("设置", _open_settings, menu_column)
 	_button("退出游戏", _open_quit, menu_column)
@@ -119,6 +122,29 @@ func _build_menu() -> void:
 	caption = _label("", 16)
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(caption)
+
+func _refresh_continue() -> void:
+	var flow := get_node("/root/GameFlow")
+	var saved: Dictionary = flow.saves.inspect()
+	continue_button.disabled = saved.is_empty()
+	continue_button.tooltip_text = flow.saves.message
+	if saved.is_empty():
+		status.text = flow.saves.message
+	else:
+		status.text = "%s · 第 %d 层 · %d 步" % [str(saved.metadata.profile.name).left(12), saved.run.floor_number, saved.run.steps_taken]
+		if not flow.saves.message.is_empty(): status.text += " · 使用恢复存档"
+
+func _continue_journey() -> void:
+	if not get_node("/root/GameFlow").continue_exploration(): _refresh_continue()
+
+func _open_saves() -> void:
+	var browser := preload("res://Scripts/UI/save_browser.gd").new()
+	add_child(browser)
+	var flow := get_node("/root/GameFlow")
+	browser.load_requested.connect(func(profile_id: String, record_id: String):
+		if flow.load_exploration(profile_id, record_id): browser.queue_free()
+		else: browser.feedback.text = flow.saves.message)
+	browser.open(flow.saves)
 
 
 func _layout() -> void:
@@ -182,11 +208,14 @@ func _close_modal() -> void:
 func _open_character() -> void:
 	var content := _open_modal("新的旅程")
 	content.add_child(_label("洛恩 · 见习剑士", 23))
-	var description := _label("红发、热心，带着一把练习木剑长大。\n他的冒险即将开始。", 18)
-	content.add_child(description)
-	content.add_child(_label("选择逐层探索，或直接体验洛恩对哥布林。", 15, Color(PAPER, 0.6)))
+	content.add_child(_label("角色档案名称（首次保存后加入角色列表）", 16))
+	var profile_name := LineEdit.new()
+	profile_name.text = "洛恩"
+	profile_name.max_length = 32
+	content.add_child(profile_name)
+	content.add_child(_label("每个角色独立保存，可保留多条进度记录。", 15, Color(PAPER, 0.6)))
 	new_game_requested.emit("lorn")
-	_button("逐层探索    →", func(): get_node("/root/GameFlow").start_exploration(), content)
+	_button("逐层探索    →", func(): get_node("/root/GameFlow").start_exploration(profile_name.text), content)
 	_button("战斗演示    →", _start_battle, content)
 	_button("返回", _close_modal, content).grab_focus()
 
