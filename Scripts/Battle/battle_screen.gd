@@ -23,6 +23,7 @@ var map_buttons: Dictionary = {}
 var expedition_button: Button
 var direction_button: Button
 var city_buttons: Dictionary = {}
+var inventory: Window
 
 func _ready() -> void:
 	add_to_group("gm_battle_context")
@@ -329,7 +330,8 @@ func show_floor_map() -> void:
 		_show_return_summary()
 		return
 	_label("地 下 城   /   路 线", Rect2(32, 18, 450, 42), 25, GOLD)
-	_label("第 %02d / %02d 层" % [run.floor_number, run.total_floors], Rect2(550, 20, 400, 40), 25)
+	_label("第 %02d / %02d 层" % [run.floor_number, run.total_floors], Rect2(500, 20, 210, 40), 25)
+	_button("背包 · B", Rect2(720, 22, 135, 40), _open_inventory)
 	_button("放弃并回主菜单", Rect2(1060, 22, 190, 40), _return_to_menu)
 	_button("保存并退出", Rect2(870, 22, 175, 40), _request_save_exit)
 	var returning: bool = run.phase == "returning"
@@ -438,6 +440,7 @@ func _enter_city() -> void:
 func _show_city() -> void:
 	var hero: Dictionary = flow.run.character
 	_label("城 市   /   整 备", Rect2(32, 18, 480, 42), 25, GOLD)
+	_button("背包 · B", Rect2(720, 22, 135, 40), _open_inventory)
 	_button("保存并退出", Rect2(870, 22, 175, 40), _request_save_exit)
 	_button("主菜单（未保存）", Rect2(1060, 22, 190, 40), _return_to_menu)
 	_panel(Rect2(30, 112, 410, 402))
@@ -472,9 +475,24 @@ func _enter_node(id: String) -> void:
 func _return_to_menu() -> void:
 	if flow != null: flow.return_to_menu()
 
+func _open_inventory() -> void:
+	if is_instance_valid(inventory) or not map_visible or flow == null or flow.run == null: return
+	if flow.run.phase not in ["descending", "returning", "city"] or not flow.run.pending.is_empty(): return
+	for child in get_children():
+		if child is Window and child.visible: return
+	inventory = preload("res://Scripts/UI/inventory_panel.gd").new()
+	add_child(inventory)
+	inventory.changed.connect(show_floor_map)
+	inventory.open(flow.run)
+
 func _input(event: InputEvent) -> void:
 	var gm := get_tree().get_first_node_in_group("gm_panel")
 	if gm != null and gm.is_open(): return
+	if is_instance_valid(inventory): return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_B:
+		_open_inventory()
+		get_viewport().set_input_as_handled()
+		return
 	if map_visible or busy or battle == null: return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
 		selected = ""

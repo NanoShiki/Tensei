@@ -418,3 +418,23 @@ func log_state() -> Dictionary:
 	return {"run_id": run_id, "seed": seed_value, "floor": floor_number, "node": current,
 		"pending": pending, "phase": phase, "steps": steps_taken, "wins": battles_won,
 		"hero": character.duplicate(true), "respawn": timers, "message": message}
+
+func potion_reason() -> String:
+	if phase not in ["descending", "returning", "city"] or not pending.is_empty() or failed or character.hp <= 0:
+		return "请在探索地图或城市安全状态下使用。"
+	if character.potions <= 0: return "治疗药水已用尽。"
+	if character.hp >= character.max_hp: return "生命已满，无需使用。"
+	return ""
+
+func use_field_potion() -> bool:
+	var before := log_state()
+	var reason := potion_reason()
+	var amount := 0
+	if reason.is_empty():
+		amount = mini(int(preload("res://Scripts/Battle/ability_library.gd").ENTRIES.potion.amount), character.max_hp - character.hp)
+		character.potions -= 1
+		character.hp += amount
+		message = "使用治疗药水：恢复 %d 生命，剩余 %d 瓶。" % [amount, character.potions]
+	Log.context["run_id"] = run_id
+	Log.event("inventory", "field_potion", {"success": reason.is_empty(), "reason": reason, "amount": amount, "before": before, "after": log_state()}, "INFO" if reason.is_empty() else "WARN")
+	return reason.is_empty()
