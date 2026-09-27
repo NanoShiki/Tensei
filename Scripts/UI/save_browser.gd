@@ -53,7 +53,7 @@ func open(store: RefCounted, character: Dictionary = {}, expedition: RefCounted 
 		name_input = LineEdit.new()
 		name_input.max_length = 32
 		name_input.placeholder_text = "输入存档名称（最多 32 字）"
-		name_input.text = "第 %d 层 · %d 步" % [run.floor_number, run.steps_taken]
+		name_input.text = "城市整备" if run.phase == "city" else "第 %d 层 · %d 步" % [run.floor_number, run.steps_taken]
 		name_input.text_changed.connect(func(_text): _update_save_button())
 		content.add_child(name_input)
 		save_button = _button("新增记录并退出", _request_save, content)
@@ -105,7 +105,7 @@ func _show_records(profile_id: String) -> void:
 		list_buttons.append(_button("＋ 新增存档记录", func():
 			selected_id = ""
 			feedback.text = "将新增一条记录，其他存档保留。"
-			name_input.text = "第 %d 层 · %d 步" % [run.floor_number, run.steps_taken]
+			name_input.text = "城市整备" if run.phase == "city" else "第 %d 层 · %d 步" % [run.floor_number, run.steps_taken]
 			_update_save_button(), rows))
 	for record in records:
 		var text: String
@@ -116,7 +116,8 @@ func _show_records(profile_id: String) -> void:
 		else:
 			var meta: Dictionary = record.metadata
 			var date := Time.get_datetime_string_from_unix_time(int(meta.saved_at / 1000000) + int(Time.get_time_zone_from_system().bias) * 60).replace("T", " ")
-			text = "%s\n第 %d 层 · %d 步 · %s · %s" % [meta.name, record.run.floor_number, record.run.steps_taken, "返回中" if record.run.phase == "returning" else "深入中", date]
+			var location: String = "城市整备" if record.run.phase == "city" else "第 %d 层 · %d 步 · %s" % [record.run.floor_number, record.run.steps_taken, "返回中" if record.run.phase == "returning" else "深入中"]
+			text = "%s\n%s · %s" % [meta.name, location, date]
 			if not record.warning.is_empty(): text += "\n" + record.warning
 			if run == null:
 				callback = func(): load_requested.emit(profile_id, record.record_id)

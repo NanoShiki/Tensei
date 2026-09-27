@@ -119,10 +119,13 @@ func test_return() -> void:
 		var key: String = target.key
 		target.id = "tampered"
 		check(run.step_return(key), "合法返程目标可移动，预览修改不污染状态")
-		if not run.pending.is_empty(): run.finish_battle(run.character, true)
+		if not run.pending.is_empty():
+			run.finish_battle(run.character, true)
+			inventory.gold += 3
+			inventory.scrap += 1
 		check(run.node(run.current).key == route[index], "跨层返回实际历史节点")
 		check(not run.step_return(key), "同一目标重复提交不会多走一步")
-		check(run.character == inventory, "回经战斗、营地和补给不增减资源")
+		check(run.character == inventory, "返程仅交战胜利增加战利品，重复经过营地和补给不领奖")
 	check(run.floor_number == 1 and run.current == "entry", "路线尽头为首层入口")
 	check(run.return_summary().is_empty(), "抵达入口尚未结算回城")
 	var city: String = run.return_target().key

@@ -5,10 +5,17 @@ func _initialize() -> void:
 
 func _capture() -> void:
 	var mode := OS.get_environment("TENSEI_CAPTURE_MODE")
-	if mode in ["map", "return", "returned"]:
+	if mode in ["map", "return", "returned", "city"]:
 		var flow = root.get_node("GameFlow")
 		flow.run = load("res://Scripts/Exploration/floor_run.gd").new()
 		flow.run.setup(123)
+		if mode == "city":
+			flow.profile = flow.saves.new_profile("洛恩 · 城市试玩")
+			flow.run.phase = "city"
+			flow.run.character.gold = 12
+			flow.run.character.scrap = 4
+			flow.run.character.hp = 18
+			flow.run.message = "已回到城市。可以休整、购买补给、打造铁剑，再次出发。"
 		if mode in ["return", "returned"]:
 			flow.run.enter("1a")
 			flow.run.finish_battle(flow.run.character, true)

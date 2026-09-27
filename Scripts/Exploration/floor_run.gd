@@ -165,12 +165,14 @@ func finish_battle(hero: Dictionary, victory: bool) -> bool:
 		item.enemy_active = false
 		item.clear_count += 1
 		battles_won += 1
+		character.gold += 3
+		character.scrap += 1
 		var random := RandomNumberGenerator.new()
 		random.seed = seed_value + floor_number * 997 + int(item.step) * 101 + int(item.lane) * 17 + int(item.clear_count) * 7919
 		item.respawn_total = random.randi_range(3, 5)
 		item.respawn_in = item.respawn_total
 		_record_position(item.key)
-		message = "战斗胜利。此处怪物将在再走 %d 步后刷新。" % item.respawn_in
+		message = "战斗胜利：金币 +3、铁片 +1。此处怪物将在再走 %d 步后刷新。" % item.respawn_in
 	else:
 		failed = true
 		phase = "failed"
@@ -236,9 +238,44 @@ func step_return(expected_key: String) -> bool:
 func return_summary() -> Dictionary:
 	return _summary.duplicate(true)
 
+func enter_city() -> bool:
+	if phase != "returned": return false
+	phase = "city"
+	message = "已回到城市。战利品随身保留，可休整、补给或打造铁剑。"
+	return true
+
+func city_service(action: String) -> bool:
+	if phase != "city": return false
+	match action:
+		"rest":
+			if character.hp >= character.max_hp: return false
+			character.hp = character.max_hp
+			message = "旅店休整：生命已恢复。Demo 阶段免费。"
+		"potion":
+			if character.gold < 3: return false
+			character.gold -= 3
+			character.potions += 1
+			message = "花费 3 金币，购入 1 瓶治疗药水。"
+		"forge":
+			if character.gold < 6 or character.scrap < 3 or character.weapon == "iron_sword": return false
+			character.gold -= 6
+			character.scrap -= 3
+			character.weapon = "iron_sword"
+			message = "花费 6 金币、3 铁片，打造并装备铁剑。剑击与强攻伤害 +2。"
+		_: return false
+	return true
+
+func depart_city(next_seed: int) -> bool:
+	if phase != "city" or character.hp <= 0: return false
+	var prepared := character.duplicate(true)
+	setup(next_seed, total_floors)
+	character = prepared
+	message = "带着装备、金币、铁片与补给，从第一层开始新的远征。"
+	return true
+
 func save_data() -> Dictionary:
-	# 只保存地图安全点；战斗中断恢复将在战斗状态可序列化后接入。
-	if phase not in ["descending", "returning"] or not pending.is_empty() or failed or character.hp <= 0: return {}
+	# 地图与城市使用同一角色快照，旧记录读取不会向外部余额重复发奖。
+	if phase not in ["descending", "returning", "city"] or not pending.is_empty() or failed or character.hp <= 0: return {}
 	return {"seed": seed_value, "run_id": run_id, "total_floors": total_floors,
 		"floor_number": floor_number, "deepest_floor": deepest_floor, "phase": phase,
 		"current": current, "completed": completed, "steps_taken": steps_taken,
@@ -256,12 +293,18 @@ static func from_save(data: Variant) -> RefCounted:
 		if not data.has(key) or typeof(data[key]) != shape[key]: return null
 	if data.run_id.is_empty() or data.total_floors < 1 or data.total_floors > 1000: return null
 	if data.floor_number < 1 or data.floor_number > data.deepest_floor or data.deepest_floor > data.total_floors: return null
-	if data.phase not in ["descending", "returning"] or data.steps_taken < 0 or data.battles_won < 0: return null
+	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
+	data = data.duplicate(true)
+	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
+	for key in ["gold", "scrap", "weapon"]:
+		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
 		if not data.character.has(key) or typeof(data.character[key]) != typeof(hero[key]): return null
 	if data.character.id != "lorn" or data.character.max_hp <= 0 or data.character.hp <= 0 or data.character.hp > data.character.max_hp: return null
 	if data.character.potions < 0 or data.character.fire_potions < 0: return null
+	if data.character.gold < 0 or data.character.scrap < 0 or data.character.weapon not in ["training_sword", "iron_sword"]: return null
+	if data.phase == "city" and (data.current != "entry" or data.floor_number != 1): return null
 	if data.floors.size() != data.deepest_floor: return null
 	var restored = load("res://Scripts/Exploration/floor_run.gd").new()
 	restored.setup(data.seed, data.total_floors, data.run_id)

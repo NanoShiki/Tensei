@@ -22,6 +22,7 @@ var _settled := false
 var map_buttons: Dictionary = {}
 var expedition_button: Button
 var direction_button: Button
+var city_buttons: Dictionary = {}
 
 func _ready() -> void:
 	add_to_group("gm_battle_context")
@@ -48,6 +49,7 @@ func _clear() -> void:
 	buttons.clear()
 	targets.clear()
 	map_buttons.clear()
+	city_buttons.clear()
 	expedition_button = null
 	direction_button = null
 
@@ -155,7 +157,7 @@ func _refresh() -> void:
 	hint_label = _label(message, Rect2(30, 480, 1220, 32), 17, GOLD)
 	_panel(Rect2(20, 529, 257, 170))
 	_label("装备 / 洛恩", Rect2(36, 541, 230, 26), 17, GOLD)
-	_label("练习木剑   ·   布衣\n护甲 AC 14    命中 +5", Rect2(36, 579, 226, 55), 17)
+	_label("%s · 布衣\n护甲 AC %d · 命中 +%d\n剑技伤害加成 +%d" % [CharacterLibrary.weapon_name(battle.hero), battle.hero.ac, battle.hero.attack, CharacterLibrary.weapon_bonus(battle.hero)], Rect2(36, 577, 226, 70), 16)
 	_label("生命 %d / %d" % [battle.hero.hp, battle.hero.max_hp], Rect2(36, 652, 225, 26), 18, Color("9fc0a0"))
 	_panel(Rect2(291, 529, 448, 170))
 	_label("技能", Rect2(307, 541, 60, 24), 17, GOLD)
@@ -231,6 +233,8 @@ func _ability_button(id: String, rect: Rect2) -> void:
 	var reason: String = battle.reason(id)
 	button.disabled = busy or not reason.is_empty()
 	button.tooltip_text = entry.hint + ("\n" + reason if not reason.is_empty() else "")
+	if entry.has("die"):
+		button.tooltip_text = "1 行动 · 命中 +%d · 1d%d+%d 伤害" % [int(battle.hero.attack) - int(entry.get("penalty", 0)), entry.die, int(entry.bonus) + CharacterLibrary.weapon_bonus(battle.hero)] + ("\n" + reason if not reason.is_empty() else "")
 	var icon := TextureRect.new()
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.texture = load("res://Assets/Battle/%s.svg" % id)
@@ -318,6 +322,9 @@ func show_floor_map() -> void:
 	_clear()
 	_backdrop()
 	var run: RefCounted = flow.run
+	if run.phase == "city":
+		_show_city()
+		return
 	if run.phase == "returned":
 		_show_return_summary()
 		return
@@ -388,7 +395,7 @@ func show_floor_map() -> void:
 				progress.add_child(fill)
 		map_buttons[item.id] = button
 	_panel(Rect2(24, 540, 1232, 155))
-	_label("洛恩   /   生命 %d / %d    治疗药水 %d    灼烧药水 %d" % [run.character.hp, run.character.max_hp, run.character.potions, run.character.fire_potions], Rect2(48, 563, 1100, 36), 23, GOLD)
+	_label("生命 %d/%d · 治疗 %d · 灼烧 %d · 金币 %d · 铁片 %d" % [run.character.hp, run.character.max_hp, run.character.potions, run.character.fire_potions, run.character.gold, run.character.scrap], Rect2(48, 563, 1100, 36), 23, GOLD)
 	_label(run.message, Rect2(48, 619, 1150, 60), 20).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _begin_return() -> void:
@@ -421,8 +428,38 @@ func _show_return_summary() -> void:
 	_label("最深抵达  第 %d 层     /     清理战斗  %d 场" % [summary.deepest_floor, summary.cleared_count], Rect2(285, 265, 720, 45), 24)
 	_label("剩余生命  %d / %d" % [hero.hp, hero.max_hp], Rect2(285, 330, 700, 38), 23)
 	_label("治疗药水  %d     /     灼烧药水  %d" % [hero.potions, hero.fire_potions], Rect2(285, 385, 700, 38), 23)
-	_label("本趟已结束。此页不覆盖手动存档，永久收益尚未接入。", Rect2(285, 450, 720, 35), 18, MUTED)
-	_button("返回主菜单", Rect2(465, 525, 350, 48), _return_to_menu, true)
+	_label("随身金币 %d · 铁片 %d · 回城不重复发放战利品" % [hero.gold, hero.scrap], Rect2(285, 450, 720, 35), 18, MUTED)
+	city_buttons["enter"] = _button("进入城市整备", Rect2(465, 515, 350, 48), _enter_city, true)
+	_button("返回主菜单（未保存）", Rect2(465, 570, 350, 38), _return_to_menu)
+
+func _enter_city() -> void:
+	if flow.run.enter_city(): show_floor_map()
+
+func _show_city() -> void:
+	var hero: Dictionary = flow.run.character
+	_label("城 市   /   整 备", Rect2(32, 18, 480, 42), 25, GOLD)
+	_button("保存并退出", Rect2(870, 22, 175, 40), _request_save_exit)
+	_button("主菜单（未保存）", Rect2(1060, 22, 190, 40), _return_to_menu)
+	_panel(Rect2(30, 112, 410, 402))
+	_label("%s · 洛恩" % str(flow.profile.get("name", "角色")).left(16), Rect2(52, 137, 370, 40), 23, GOLD)
+	_label("生命 %d / %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s" % [hero.hp, hero.max_hp, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero)], Rect2(52, 202, 365, 260), 23)
+	_panel(Rect2(468, 112, 780, 402))
+	_label("休整与工坊", Rect2(496, 137, 700, 40), 24, GOLD)
+	city_buttons["rest"] = _button("旅店休整 · 免费恢复全部生命", Rect2(496, 205, 720, 54), _city_service.bind("rest"))
+	city_buttons["rest"].disabled = hero.hp >= hero.max_hp
+	city_buttons["potion"] = _button("购买治疗药水 ×1 · 3 金币", Rect2(496, 277, 720, 54), _city_service.bind("potion"))
+	city_buttons["potion"].disabled = hero.gold < 3
+	city_buttons["forge"] = _button("铁剑已装备" if hero.weapon == "iron_sword" else "打造并装备铁剑 · 6 金币 + 3 铁片", Rect2(496, 349, 720, 54), _city_service.bind("forge"), true)
+	city_buttons["forge"].disabled = hero.weapon == "iron_sword" or hero.gold < 6 or hero.scrap < 3
+	_label("铁剑：剑击与强攻伤害 +2。战斗胜利获得 3 金币、1 铁片。", Rect2(496, 433, 716, 58), 17, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_label(flow.run.message, Rect2(42, 541, 1180, 60), 20).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	city_buttons["depart"] = _button("准备完毕 · 从第一层出发", Rect2(420, 620, 440, 58), _depart_city, true)
+
+func _city_service(action: String) -> void:
+	if flow.run.city_service(action): show_floor_map()
+
+func _depart_city() -> void:
+	if flow.run.depart_city(randi()): show_floor_map()
 
 func _node_position(item: Dictionary) -> Vector2:
 	return Vector2(58 + int(item.step) * 244, 210 + int(item.lane) * 110)

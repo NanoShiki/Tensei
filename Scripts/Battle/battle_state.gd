@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Abilities = preload("res://Scripts/Battle/ability_library.gd")
+const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 var hero: Dictionary
 var enemy: Dictionary
 var rng := RandomNumberGenerator.new()
@@ -73,7 +74,7 @@ func use_ability(id: String, target: String) -> bool:
 		logs.append("%s → %s：%s 生命。" % [entry.name, receiver.name, text])
 		last_event = {"actor": "lorn", "target": receiver.id, "text": text}
 	elif entry.target == "enemy":
-		_attack(hero, enemy, int(entry.die), int(entry.bonus), int(entry.get("penalty", 0)))
+		_attack(hero, enemy, int(entry.die), int(entry.bonus) + CharacterLibrary.weapon_bonus(hero), int(entry.get("penalty", 0)))
 	elif id == "guard":
 		guarding = true
 		logs.append("洛恩采取闪避，持续至下次自身回合开始。")
