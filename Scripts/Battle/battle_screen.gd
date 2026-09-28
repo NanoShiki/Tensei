@@ -128,7 +128,7 @@ func start_encounter() -> void:
 		if flow.run != null:
 			character = flow.run.character
 			floor_number = flow.run.floor_number
-	battle.setup(character, floor_number)
+	battle.setup(character, floor_number, -1, flow != null and flow.run != null and flow.run.is_captain_node(flow.run.pending))
 	_refresh()
 	_drive_enemy()
 
@@ -141,18 +141,20 @@ func _refresh() -> void:
 	_label("第 %d 轮" % battle.round_number, Rect2(470, 12, 80, 24), 16, GOLD)
 	for i in range(battle.order.size()):
 		var id: String = battle.order[i]
-		var name_text := "洛恩" if id == "lorn" else "哥布林"
+		var name_text := "洛恩" if id == "lorn" else str(battle.enemy.name)
 		var active: bool = battle.current_id() == id
 		_panel(Rect2(565 + i * 152, 16, 138, 53), Color("29372e") if active else Color("19262b"), GOLD if active else Color("3c4948"))
 		_label(("▶  " if active else "    ") + name_text, Rect2(577 + i * 152, 28, 120, 30), 18, GOLD if active else MUTED)
 	_button("返回主菜单", Rect2(1090, 22, 158, 40), _return_to_menu)
 	_unit("lorn", battle.hero, Rect2(202, 145, 294, 340), "res://Assets/Battle/lorn.png")
 	_unit("goblin", battle.enemy, Rect2(833, 205, 222, 302), "res://Assets/Battle/goblin.png")
+	if battle.enemy.captain:
+		_label(battle.enemy_intent(), Rect2(500, 90, 730, 36), 18, GOLD)
 	var message := "选择技能，再点击高亮目标。"
-	if busy or battle.current_id() == "goblin": message = "哥布林正在行动…"
+	if busy or battle.current_id() == "goblin": message = str(battle.enemy.name) + "正在行动…"
 	elif not selected.is_empty():
 		var entry: Dictionary = Abilities.ENTRIES[selected]
-		message = "%s → 点击%s确认   ·   右键 / Esc 取消" % [entry.name, "哥布林" if entry.target == "enemy" else "洛恩"]
+		message = "%s → 点击%s确认   ·   右键 / Esc 取消" % [entry.name, str(battle.enemy.name) if entry.target == "enemy" else "洛恩"]
 		if entry.target == "enemy" and not entry.has("stock"): message += "   ·   命中 %d%%" % battle.hit_chance(selected)
 	elif battle.action == 0: message = "本回合已行动。点击「结束回合」继续。"
 	hint_label = _label(message, Rect2(30, 480, 1220, 32), 17, GOLD)
@@ -179,7 +181,7 @@ func _refresh() -> void:
 	result_panel = _panel(Rect2(430, 188, 420, 255), Color("142125"), GOLD)
 	result_panel.visible = battle.outcome != "ongoing"
 	if result_panel.visible:
-		_label("战斗胜利" if battle.outcome == "victory" else "战斗失败", Rect2(480, 213, 320, 50), 32, GOLD)
+		_label(("阶段挑战完成" if battle.enemy.captain else "战斗胜利") if battle.outcome == "victory" else "战斗失败", Rect2(480, 213, 320, 50), 32, GOLD)
 		_label("生命 %d · 治疗 %d · 灼烧 %d" % [battle.hero.hp, battle.hero.potions, battle.hero.fire_potions], Rect2(480, 272, 325, 30), 18)
 		if flow != null and flow.run != null:
 			_button("返回本层地图", Rect2(480, 326, 320, 43), show_floor_map, true)
@@ -371,7 +373,7 @@ func show_floor_map() -> void:
 		var visit_text := "已到访" if item.visited else "未到访"
 		var status: String = names[item.kind]
 		if item.kind == "battle":
-			status = "怪物在场" if item.enemy_active else "刷新还需 %d 步" % item.respawn_in
+			status = ("守关队长" if run.is_captain_node(item.id) else "怪物在场") if item.enemy_active else "刷新还需 %d 步" % item.respawn_in
 		elif item.kind == "rest" and item.reward_claimed: status = "营地 · 已休整"
 		elif item.kind == "cache" and item.reward_claimed: status = "补给 · 已领取"
 		var title: String = (position_text + " · " if not position_text.is_empty() else "") + visit_text + "\n" + status
@@ -447,6 +449,7 @@ func _show_city() -> void:
 	_label("%s · 洛恩" % str(flow.profile.get("name", "角色")).left(16), Rect2(52, 137, 370, 40), 23, GOLD)
 	_label("生命 %d / %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s" % [hero.hp, hero.max_hp, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero)], Rect2(52, 202, 365, 260), 23)
 	_panel(Rect2(468, 112, 780, 402))
+	_label("阶段目标：已击败守关队长 · 可继续探索" if hero.captain_defeated else "阶段目标：打造铁剑，挑战第 3 层守关队长并回城", Rect2(42, 72, 1190, 32), 19, GOLD)
 	_label("休整与工坊", Rect2(496, 137, 700, 40), 24, GOLD)
 	city_buttons["rest"] = _button("旅店休整 · 免费恢复全部生命", Rect2(496, 205, 720, 54), _city_service.bind("rest"))
 	city_buttons["rest"].disabled = hero.hp >= hero.max_hp
