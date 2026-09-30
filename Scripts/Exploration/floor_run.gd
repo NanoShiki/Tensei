@@ -108,6 +108,7 @@ func _arrive(item: Dictionary, avoid: bool = false) -> String:
 		current = item.id
 		_record_position(item.key)
 		message = "消耗 1 瓶灼烧药水掩护绕行。怪物仍在场，没有战利品。"
+		Log.context["run_id"] = run_id
 		Log.event("encounter", "avoided", {"node": item.key, "enemy": item.duplicate(true), "state": log_state()})
 		return "avoided"
 	if item.kind == "battle" and item.enemy_active:
