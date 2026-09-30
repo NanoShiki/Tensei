@@ -5,6 +5,7 @@ const Quests = preload("res://Scripts/Character/quest_library.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 const Jobs = preload("res://Scripts/Character/job_library.gd")
 const PlayerProgress = preload("res://Scripts/Core/player_progress.gd")
+const Enemies = preload("res://Scripts/Battle/enemy_library.gd")
 var floor_number := 1
 var total_floors := 30
 var seed_value := 1
@@ -75,6 +76,11 @@ func generate_floor() -> void:
 		item["respawn_in"] = 0
 		item["respawn_total"] = 0
 		item["clear_count"] = 0
+		item["enemy_kind"] = ""
+		if item.kind == "battle":
+			item.enemy_kind = "captain" if is_captain_node(item.id) else (["goblin", "armored", "prowler"][(floor_number + int(item.step) + int(item.lane) / 2) % 3])
+			if floor_number == 1 and item.step == 1: item.enemy_kind = "goblin" if item.lane == 0 else "prowler"
+			if floor_number == 2 and item.step == 1 and item.lane == 0: item.enemy_kind = "armored"
 		_locations[item.key] = {"key": item.key, "floor": floor_number, "id": item.id}
 	_floors[floor_number] = nodes
 	deepest_floor = maxi(deepest_floor, floor_number)
@@ -435,14 +441,17 @@ static func from_save(data: Variant) -> RefCounted:
 			var saved: Variant = saved_nodes[index]
 			var expected: Dictionary = restored.nodes[index]
 			if not saved is Dictionary: return null
+			if not saved.has("enemy_kind"): saved["enemy_kind"] = ("captain" if restored.is_captain_node(saved.get("id", "")) else "goblin") if saved.get("kind") == "battle" else ""
 			for key in expected:
 				if not saved.has(key) or typeof(saved[key]) != typeof(expected[key]): return null
 			for key in ["id", "key", "kind", "step", "lane", "next"]:
 				if saved[key] != expected[key]: return null
 			if saved.respawn_in < 0 or saved.respawn_total < saved.respawn_in or saved.clear_count < 0: return null
 			if saved.kind == "battle":
+				if not Enemies.ENTRIES.has(saved.enemy_kind) or (saved.enemy_kind == "captain") != restored.is_captain_node(saved.id): return null
 				if saved.enemy_active != (saved.respawn_in == 0): return null
 				if saved.cleared != (saved.clear_count > 0): return null
+			elif not saved.enemy_kind.is_empty(): return null
 			if (saved.cleared or saved.reward_claimed) and not saved.visited: return null
 			restored.nodes[index] = saved.duplicate(true)
 	for history in [data.route, data.return_route]:
@@ -503,7 +512,7 @@ func encounter_preview(id: String) -> Dictionary:
 	if not legal: return {}
 	var item := node(id)
 	if item.kind != "battle" or (not item.enemy_active and item.respawn_in != 1): return {}
-	return {"id": id, "name": "守关队长" if is_captain_node(id) else "哥布林", "stock": character.fire_potions, "cost": 1, "can_avoid": character.fire_potions >= 1}
+	return {"id": id, "name": Enemies.ENTRIES[item.enemy_kind].name, "enemy_kind": item.enemy_kind, "details": Enemies.preview(item.enemy_kind, floor_number), "stock": character.fire_potions, "cost": 1, "can_avoid": character.fire_potions >= 1}
 
 func quest_service(id: String, action: String) -> bool:
 	var before := log_state()
