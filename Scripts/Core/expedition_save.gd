@@ -2,7 +2,7 @@ extends RefCounted
 
 const Run = preload("res://Scripts/Exploration/floor_run.gd")
 const VERSION := 1
-const CONTENT_VERSION := "demo-enemies-1"
+const CONTENT_VERSION := "demo-patrol-1"
 # 两代文件交替写入；提交失败时上一代始终可读。
 var base_path := "user://expedition"
 var message := ""
@@ -19,7 +19,7 @@ func _read(path: String) -> Dictionary:
 	if file == null or file.get_length() > 8 * 1024 * 1024: return {"invalid": true}
 	var data: Variant = file.get_var(false)
 	if not data is Dictionary: return {"invalid": true}
-	if data.get("version") != VERSION or data.get("content_version") not in [CONTENT_VERSION, "demo-jobs-1", "demo-party-1", "demo-avoid-1", "demo-growth-1", "demo-boss-1", "demo-city-1", "demo-map-1"]:
+	if data.get("version") != VERSION or data.get("content_version") not in [CONTENT_VERSION, "demo-enemies-1", "demo-jobs-1", "demo-party-1", "demo-avoid-1", "demo-growth-1", "demo-boss-1", "demo-city-1", "demo-map-1"]:
 		return {"incompatible": true}
 	if not data.get("generation") is int or data.generation < 1: return {"invalid": true}
 	if not data.get("payload") is PackedByteArray or not data.get("checksum") is String: return {"invalid": true}

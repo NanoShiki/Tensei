@@ -6,9 +6,11 @@ var run: RefCounted
 var rows: VBoxContainer
 var feedback: Label
 var buttons: Dictionary = {}
+var guild_level := 0
 
-func open(expedition: RefCounted) -> void:
+func open(expedition: RefCounted, organization_level: int = 0) -> void:
 	run = expedition
+	guild_level = organization_level
 	title = "城市委托"
 	transient = true
 	exclusive = true
@@ -52,18 +54,21 @@ func _refresh() -> void:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.add_theme_font_size_override("font_size", 18)
 		label.text = "%s · %s\n%s · %s\n奖励：%d 金币、%d 经验" % [entry.name, {"available": "未接取", "active": "进行中", "claimed": "已交付"}[state], entry.goal, Quests.progress(run.character, id), entry.gold, entry.xp]
+		if id == "familia_patrol": label.text += "\n当前眷族等级：%d · 仅接取后的实际编队胜利计入。" % guild_level
 		rows.add_child(label)
 		var button := Button.new()
 		button.custom_minimum_size.y = 38
 		button.text = "接取委托" if state == "available" else ("已领取" if state == "claimed" else ("交付 3 铁片并领取奖励" if id == "materials" else "领取奖励"))
-		button.disabled = state == "claimed" or (state == "active" and not Quests.ready(run.character, id))
+		var reason: String = Quests.reason(run.character, id, "accept" if state == "available" else "claim", guild_level)
+		button.disabled = not reason.is_empty()
+		button.tooltip_text = reason
 		button.pressed.connect(_act.bind(id, "accept" if state == "available" else "claim"))
 		rows.add_child(button)
 		buttons[id] = button
 	feedback.text = "每个角色每条委托仅交付一次；接取和交付后仍需手动保存。"
 
 func _act(id: String, action: String) -> void:
-	if run.quest_service(id, action):
+	if run.quest_service(id, action, guild_level):
 		_refresh()
 		feedback.text = run.message
 		changed.emit()

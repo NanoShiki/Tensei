@@ -42,7 +42,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-enemies-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-patrol-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -139,7 +139,7 @@ func settle_battle(hero: Dictionary, ally: Dictionary, victory: bool) -> bool:
 		if victory:
 			var event_id: String = run.node(run.pending).key + "/clear/" + str(run.node(run.pending).clear_count + 1)
 			if event_id not in settled.growth_pending: settled.growth_pending.append(event_id)
-	if not run.finish_battle(settled, victory): return false
+	if not run.finish_battle(settled, victory, not ally.is_empty()): return false
 	retry_growth()
 	if not run.character.growth_pending.is_empty(): run.message += " 共享成长待重试，请保存当前记录。"
 	active_character = run.character.duplicate(true)
@@ -148,6 +148,10 @@ func settle_battle(hero: Dictionary, ally: Dictionary, victory: bool) -> bool:
 func city_service(action: String) -> bool:
 	var member := party_companion()
 	return run != null and run.city_service(action, member.get("max_hp", 0))
+
+func guild_level() -> int:
+	if run == null or run.character.familia_id != "dawn" or not progress.refresh() or progress.data.get("player_id") != run.character.player_id: return 0
+	return progress.guild_level()
 
 func _change_scene(path: String) -> void:
 	if not _pending_scene.is_empty(): return

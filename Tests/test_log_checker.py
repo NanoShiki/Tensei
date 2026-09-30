@@ -184,6 +184,32 @@ class LogCheckerTests(unittest.TestCase):
             path.write_text(json.dumps(row), encoding="utf-8")
             self.assertIn("attack advantage cancellation", inspect([path])[1][0])
 
+    def test_member_quest_requires_guild_level_and_real_party_victory(self):
+        before = {"phase": "city", "steps": 0, "respawn": {}, "message": "ready", "hero": {
+            "familia_id": "dawn", "familia_wins": 0, "quests": {"familia_patrol": "available"}}}
+        after = json.loads(json.dumps(before))
+        after["hero"]["quests"]["familia_patrol"] = "active"
+        after["message"] = "accepted"
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "quest", "event": "accept",
+            "data": {"id": "familia_patrol", "guild_level": 1, "success": True, "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("member quest qualification", inspect([path])[1][0])
+            row["data"]["guild_level"] = 2
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            source = {"familia_id": "dawn", "familia_wins": 0, "party_enlisted": True, "quests": {"familia_patrol": "active"},
+                "hp": 36, "max_hp": 36, "gold": 0, "scrap": 0, "potions": 3, "fire_potions": 2}
+            hero = dict(source, gold=3, scrap=1, familia_wins=1)
+            row.update(category="exploration", event="finish_battle", data={"success": True, "input": {"hero": source, "victory": True, "with_party": True},
+                "before": {"wins": 0}, "after": {"wins": 1, "hero": hero}})
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            row["data"]["input"]["with_party"] = False
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("member victory progress", inspect([path])[1][0])
+
 
 if __name__ == "__main__":
     unittest.main()

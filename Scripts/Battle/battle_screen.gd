@@ -576,7 +576,7 @@ func _open_quests() -> void:
 	var board := preload("res://Scripts/UI/quest_board.gd").new()
 	add_child(board)
 	board.changed.connect(show_floor_map)
-	board.open(flow.run)
+	board.open(flow.run, flow.guild_level())
 
 func _toggle_practice() -> void:
 	if busy or (flow != null and flow.run != null): return
