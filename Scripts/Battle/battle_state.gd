@@ -174,7 +174,7 @@ func _enemy_turn() -> bool:
 
 func enemy_intent() -> String:
 	if not enemy.get("captain", false): return ""
-	return "敌方意图：重击 · 命中 +4 · 1d10+4；可用闪避应对" if charging else "敌方意图：蓄力 · 本次不攻击，下次行动重击"
+	return ("敌方意图：重击 · 随机攻击存活成员；闪避仅保护自身" if not ally.is_empty() else "敌方意图：重击 · 命中 +4 · 1d10+4；可用闪避应对") if charging else "敌方意图：蓄力 · 本次不攻击，下次行动重击"
 
 func _advance() -> void:
 	for i in range(order.size()):

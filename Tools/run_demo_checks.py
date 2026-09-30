@@ -15,7 +15,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-LOG_SCENARIOS = {"test_city_loop", "test_inventory", "test_stage_boss", "test_quests_growth", "test_encounter_choice", "test_party_combat"}
+LOG_SCENARIOS = {"test_city_loop", "test_inventory", "test_stage_boss", "test_quests_growth", "test_encounter_choice", "test_party_combat", "test_party_expedition"}
 
 
 def classify(returncode, output, require_completion=True):
@@ -92,11 +92,11 @@ def main():
                 if errors: result["reason"] = result["reason"] or "business log invariants"
             report["tests"][test.stem] = result
             print(("PASS " if result["passed"] else "FAIL ") + test.stem, flush=True)
-        for stem, prefix in (("test_expedition_save", "SAVE"), ("test_save_library", "LIBRARY")):
+        for stem, prefix in (("test_expedition_save", "SAVE"), ("test_save_library", "LIBRARY"), ("test_player_progress", "FAMILIA")):
             if stem not in report["tests"]:
                 continue
             restart_env = env.copy()
-            tag = "test-save-" if prefix == "SAVE" else "test-library-"
+            tag = {"SAVE": "test-save-", "LIBRARY": "test-library-", "FAMILIA": "test-familia-"}[prefix]
             restart_env[f"TENSEI_{prefix}_TEST_PATH"] = "user://" + tag + uuid.uuid4().hex
             for phase in ("write", "read"):
                 key = stem + "-" + phase

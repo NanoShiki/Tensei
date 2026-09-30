@@ -4,7 +4,8 @@ static func resolve(_character_id: String = "lorn") -> Dictionary:
 	return {"id": "lorn", "name": "洛恩", "hp": 36, "max_hp": 36,
 		"ac": 14, "attack": 5, "dex": 2, "potions": 3, "fire_potions": 2, "surge": 1,
 		"gold": 0, "scrap": 0, "weapon": "training_sword", "captain_defeated": false, "experience": 0, "level": 1, "hunt_wins": 0,
-		"quests": {"hunt": "available", "materials": "available", "captain": "available"}}
+		"quests": {"hunt": "available", "materials": "available", "captain": "available"},
+		"familia_id": "", "player_id": "", "party_enlisted": false, "party_hp": 0, "growth_pending": []}
 
 static func weapon_name(hero: Dictionary) -> String:
 	return "铁剑" if hero.get("weapon", "training_sword") == "iron_sword" else "练习木剑"

@@ -88,6 +88,55 @@ class LogCheckerTests(unittest.TestCase):
             path.write_text(json.dumps(row) + "\n{broken", encoding="utf-8")
             self.assertEqual(len(inspect([path])[1]), 3)
 
+    def test_healing_cannot_revive_and_guard_cannot_affect_partner(self):
+        before = {"actor": "lorn", "actions": 1, "guarding": False, "ally_guarding": False,
+            "hero": {"hp": 30, "max_hp": 36, "potions": 3, "surge": 1},
+            "ally": {"hp": 0, "max_hp": 28, "surge": 1}, "enemy": {"hp": 22, "max_hp": 22}}
+        after = json.loads(json.dumps(before))
+        after["actions"] = 0
+        after["hero"]["potions"] = 2
+        after["ally"]["hp"] = 12
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "battle",
+               "event": "use_ability", "data": {"input": {"ability": "potion", "target": "squire"}, "success": True, "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("healed a downed member", inspect([path])[1][0])
+            after = json.loads(json.dumps(before))
+            after.update(actions=0, guarding=True)
+            row["data"].update(input={"ability": "guard", "target": "lorn"}, after=after)
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["ally_guarding"] = True
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("guard changed another member", inspect([path])[1][0])
+            after = json.loads(json.dumps(before))
+            after["actions"] = 0
+            after["hero"].update(hp=36, surge=0)
+            row["data"].update(input={"ability": "surge", "target": "lorn"}, after=after)
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["ally"]["surge"] = 0
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("surge changed another member", inspect([path])[1][0])
+
+    def test_shared_growth_is_idempotent(self):
+        before = {"player_id": "test", "familias": {"dawn": {"contribution": 0, "squire_xp": 0, "events": {}}}}
+        after = {"player_id": "test", "familias": {"dawn": {"contribution": 1, "squire_xp": 2, "events": {"clear": True}}}}
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "familia",
+            "event": "victory_growth", "data": {"id": "clear", "success": True, "duplicate": False, "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            row["data"].update(before=after, duplicate=True)
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            row["data"]["after"] = json.loads(json.dumps(after))
+            row["data"]["after"]["familias"]["dawn"]["squire_xp"] += 2
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("duplicate shared reward", inspect([path])[1][0])
+
 
 if __name__ == "__main__":
     unittest.main()

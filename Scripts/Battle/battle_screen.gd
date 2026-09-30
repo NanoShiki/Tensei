@@ -129,7 +129,7 @@ func start_encounter() -> void:
 		if flow.run != null:
 			character = flow.run.character
 			floor_number = flow.run.floor_number
-	battle.setup(character, floor_number, -1, flow != null and flow.run != null and flow.run.is_captain_node(flow.run.pending), BattleState.practice_companion() if party_practice else {})
+	battle.setup(character, floor_number, -1, flow != null and flow.run != null and flow.run.is_captain_node(flow.run.pending), BattleState.practice_companion() if party_practice else (flow.party_companion() if flow != null and flow.run != null else {}))
 	_refresh()
 	_drive_enemy()
 
@@ -148,7 +148,7 @@ func _refresh() -> void:
 		_label(("▶  " if active else "    ") + name_text, Rect2(577 + i * 152, 28, 120, 30), 18, GOLD if active else MUTED)
 	_button("返回主菜单", Rect2(1090, 22, 158, 40), _return_to_menu)
 	if flow == null or flow.run == null:
-		_button("单人演练" if party_practice else "双人演练", Rect2(28, 88, 158, 36), _toggle_practice)
+		_button("单人演练" if party_practice else "双人演练", Rect2(1090, 90, 158, 36), _toggle_practice)
 	if not battle.ally.is_empty():
 		_unit("lorn", battle.hero, Rect2(85, 197, 210, 284), "res://Assets/Battle/lorn.png")
 		_unit("squire", battle.ally, Rect2(330, 212, 185, 267), "res://Assets/Battle/lorn.png")
@@ -310,7 +310,7 @@ func _settle() -> void:
 	_settled = true
 	if flow != null:
 		flow.active_character = battle.hero.duplicate(true)
-		if flow.run != null: flow.run.finish_battle(battle.hero, battle.outcome == "victory")
+		if flow.run != null: flow.settle_battle(battle.hero, battle.ally, battle.outcome == "victory")
 
 func gm_kill_reason() -> String:
 	if map_visible or battle == null: return "请先进入战斗"
@@ -411,7 +411,8 @@ func show_floor_map() -> void:
 		map_buttons[item.id] = button
 	_panel(Rect2(24, 540, 1232, 155))
 	_label("生命 %d/%d · 治疗 %d · 灼烧 %d · 金币 %d · 铁片 %d" % [run.character.hp, run.character.max_hp, run.character.potions, run.character.fire_potions, run.character.gold, run.character.scrap], Rect2(48, 563, 1100, 36), 23, GOLD)
-	_label(run.message, Rect2(48, 619, 1150, 60), 20).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_label(_party_status(), Rect2(48, 597, 1100, 26), 16, MUTED)
+	_label(run.message, Rect2(48, 627, 1150, 60), 20).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _begin_return() -> void:
 	if flow.run.begin_return(): show_floor_map()
@@ -452,19 +453,21 @@ func _enter_city() -> void:
 
 func _show_city() -> void:
 	var hero: Dictionary = flow.run.character
-	_label("城 市   /   整 备", Rect2(32, 18, 480, 42), 25, GOLD)
+	_label("城 市   /   整 备", Rect2(32, 18, 350, 42), 25, GOLD)
+	city_buttons["familia"] = _button("眷族／编队", Rect2(420, 22, 135, 40), _open_familia)
 	city_buttons["quests"] = _button("委托", Rect2(570, 22, 135, 40), _open_quests)
 	_button("背包 · B", Rect2(720, 22, 135, 40), _open_inventory)
 	_button("保存并退出", Rect2(870, 22, 175, 40), _request_save_exit)
 	_button("主菜单（未保存）", Rect2(1060, 22, 190, 40), _return_to_menu)
 	_panel(Rect2(30, 112, 410, 402))
+	_label(_party_status(), Rect2(52, 455, 370, 45), 16, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label("%s · 等级 %d" % [str(flow.profile.get("name", "角色")).left(12), hero.level], Rect2(52, 137, 370, 40), 23, GOLD)
 	_label("生命 %d / %d · 经验 %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s" % [hero.hp, hero.max_hp, hero.experience, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero)], Rect2(52, 202, 365, 260), 23)
 	_panel(Rect2(468, 112, 780, 402))
 	_label("阶段目标：已击败守关队长 · 可继续探索" if hero.captain_defeated else "阶段目标：打造铁剑，挑战第 3 层守关队长并回城", Rect2(42, 72, 1190, 32), 19, GOLD)
 	_label("休整与工坊", Rect2(496, 137, 700, 40), 24, GOLD)
 	city_buttons["rest"] = _button("旅店休整 · 免费恢复全部生命", Rect2(496, 192, 720, 46), _city_service.bind("rest"))
-	city_buttons["rest"].disabled = hero.hp >= hero.max_hp
+	city_buttons["rest"].disabled = hero.hp >= hero.max_hp and (flow.party_companion().is_empty() or hero.party_hp >= flow.party_companion().max_hp)
 	city_buttons["potion"] = _button("购买治疗药水 ×1 · 3 金币", Rect2(496, 250, 720, 46), _city_service.bind("potion"))
 	city_buttons["potion"].disabled = hero.gold < 3
 	city_buttons["fire_potion"] = _button("购买灼烧药水 ×1 · 4 金币（战斗／绕行）", Rect2(496, 308, 720, 46), _city_service.bind("fire_potion"))
@@ -476,7 +479,7 @@ func _show_city() -> void:
 	city_buttons["depart"] = _button("准备完毕 · 从第一层出发", Rect2(420, 620, 440, 58), _depart_city, true)
 
 func _city_service(action: String) -> void:
-	if flow.run.city_service(action): show_floor_map()
+	if flow.city_service(action): show_floor_map()
 
 func _depart_city() -> void:
 	if flow.run.depart_city(randi()): show_floor_map()
@@ -541,6 +544,12 @@ func _move_choice(id: String, return_key: String, avoid: bool) -> void:
 	if return_key.is_empty(): _enter_node(id, avoid)
 	else: _return_step(return_key, avoid)
 
+func _open_familia() -> void:
+	var board := preload("res://Scripts/UI/familia_board.gd").new()
+	add_child(board)
+	board.changed.connect(show_floor_map)
+	board.open(flow)
+
 func _open_quests() -> void:
 	if flow == null or flow.run == null or flow.run.phase != "city": return
 	for child in get_children():
@@ -556,3 +565,7 @@ func _toggle_practice() -> void:
 	party_practice = not party_practice
 	if flow != null: flow.active_character = CharacterLibrary.resolve()
 	start_encounter()
+
+func _party_status() -> String:
+	var member: Dictionary = flow.party_companion()
+	return "单人探索 · 在城市眷族菜单招募队友" if member.is_empty() else "见习卫士 等级 %d · 生命 %d/%d · 共享经验 %d" % [member.level, member.hp, member.max_hp, member.experience]
