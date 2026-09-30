@@ -66,6 +66,8 @@ func _ready() -> void:
 	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layout.add_child(feedback)
 	register_command("kill_enemy", "秒杀当前敌人", "立即获胜，并执行正常战斗结算。", _kill_enemy, _kill_reason)
+	register_command("restore_party", "恢复存活成员", "存活己方生命恢复至上限；倒下者仍需城市旅店。测试改动会进入手动存档。", _recover.bind("restore_party"), _recover_reason.bind("restore_party"))
+	register_command("refill_potions", "补足测试药水", "治疗与灼烧药水各补至至少 10 瓶，不扣金币。测试改动会进入手动存档。", _recover.bind("refill_potions"), _recover_reason.bind("refill_potions"))
 	register_command("open_logs", "打开日志目录", "查看业务事件 JSONL 与引擎 godot.log；反馈问题时附上本次日志。", func(): return OS.shell_open(ProjectSettings.globalize_path("user://logs")) == OK, func(): return "")
 	set_open(false)
 
@@ -133,6 +135,14 @@ func _kill_reason() -> String:
 func _kill_enemy() -> bool:
 	var context := _battle_context()
 	return context != null and context.gm_kill_enemy()
+
+func _recover_reason(action: String) -> String:
+	var context := _battle_context()
+	return "请先进入旅程或战斗演示" if context == null else context.gm_recovery_reason(action)
+
+func _recover(action: String) -> bool:
+	var context := _battle_context()
+	return context != null and context.gm_recovery(action)
 
 func _input(event: InputEvent) -> void:
 	if is_open() and event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:

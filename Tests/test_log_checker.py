@@ -8,6 +8,31 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_gm_recovery_cannot_revive_or_grant_actions(self):
+        before = {"hero": {"hp": 10, "max_hp": 36, "potions": 1, "fire_potions": 2},
+            "ally": {"hp": 0, "max_hp": 28}, "scout": {"hp": 8, "max_hp": 22}, "actions": 0}
+        after = json.loads(json.dumps(before))
+        after["hero"]["hp"] = 36
+        after["scout"]["hp"] = 22
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "gm",
+            "event": "restore_party", "data": {"scope": "battle", "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["ally"]["hp"] = 28
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertTrue(inspect([path])[1])
+            after["ally"]["hp"] = 0
+            after["actions"] = 1
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertTrue(inspect([path])[1])
+            after = json.loads(json.dumps(before))
+            after["hero"].update(potions=10, fire_potions=10)
+            row.update(event="refill_potions", data={"scope": "battle", "before": before, "after": after})
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+
     def test_depth_goal_requires_actual_floor_and_city_claim(self):
         hero = {"quests": {"depth_five": "active"}, "depth_goal": 5}
         row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "objective",

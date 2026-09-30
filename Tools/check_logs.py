@@ -123,6 +123,29 @@ def inspect(paths):
                     assert data["enemy"]["enemy_active"] and data["enemy"]["visited"] and data["state"]["pending"] == "", "avoidance removed encounter"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
+            if row["category"] == "gm" and row["event"] in ("restore_party", "refill_potions") and "before" in data:
+                try:
+                    expected = json.loads(json.dumps(data["before"]))
+                    if row["event"] == "refill_potions":
+                        for field in ("potions", "fire_potions"):
+                            expected["hero"][field] = max(10, expected["hero"][field])
+                    elif data["scope"] == "battle":
+                        for field in ("hero", "ally", "scout"):
+                            if expected.get(field) and expected[field]["hp"] > 0:
+                                expected[field]["hp"] = expected[field]["max_hp"]
+                    elif data["scope"] == "map":
+                        hero = expected["hero"]
+                        if hero["hp"] > 0: hero["hp"] = hero["max_hp"]
+                        for member, prefix, base in (("squire", "party", 28), ("scout", "scout", 22)):
+                            if hero.get(prefix + "_enlisted") and hero[prefix + "_hp"] > 0:
+                                limit = data["limits"][member]
+                                assert limit in range(base, base + 13, 3), "GM member limit"
+                                hero[prefix + "_hp"] = limit
+                    else:
+                        raise AssertionError("GM invalid scope")
+                    assert expected == data["after"], "GM changed unrelated progress or revived member"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "objective" and row["event"] == "depth_progress":
                 try:
                     assert data["state"]["hero"]["quests"]["depth_five"] == "active", "depth quest inactive"
