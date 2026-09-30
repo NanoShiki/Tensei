@@ -43,7 +43,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-team-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-depth-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -157,12 +157,18 @@ func settle_battle(hero: Dictionary, ally: Dictionary, victory: bool, scout: Dic
 		members.append("scout")
 	if victory and not members.is_empty():
 		var event_id: String = run.node(run.pending).key + "/clear/" + str(run.node(run.pending).clear_count + 1)
-		settled.growth_pending.append({"id": event_id, "members": members})
+		if not settled.growth_pending.any(func(event: Dictionary): return event.id == event_id):
+			settled.growth_pending.append({"id": event_id, "members": members})
 	if not run.finish_battle(settled, victory, not members.is_empty()): return false
 	retry_growth()
 	if not run.character.growth_pending.is_empty(): run.message += " 共享成长待重试，请保存当前记录。"
 	active_character = run.character.duplicate(true)
 	return true
+
+func quest_service(id: String, action: String) -> bool:
+	if run == null: return false
+	# UI 只能提交意图；每次操作读取并核对共享档案归属。
+	return run.quest_service(id, action, guild_level())
 
 func city_service(action: String) -> bool:
 	var member := party_companion()

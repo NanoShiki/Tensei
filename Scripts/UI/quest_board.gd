@@ -7,10 +7,11 @@ var rows: VBoxContainer
 var feedback: Label
 var buttons: Dictionary = {}
 var guild_level := 0
+var flow: Node
 
-func open(expedition: RefCounted, organization_level: int = 0) -> void:
-	run = expedition
-	guild_level = organization_level
+func open(game_flow: Node) -> void:
+	flow = game_flow
+	run = flow.run
 	title = "城市委托"
 	transient = true
 	exclusive = true
@@ -33,6 +34,11 @@ func open(expedition: RefCounted, organization_level: int = 0) -> void:
 	feedback = Label.new()
 	feedback.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(feedback)
+	var refresh := Button.new()
+	refresh.text = "刷新委托与共享资格"
+	refresh.custom_minimum_size.y = 30
+	refresh.pressed.connect(_refresh)
+	box.add_child(refresh)
 	var close := Button.new()
 	close.text = "关闭"
 	close.custom_minimum_size.y = 38
@@ -43,6 +49,7 @@ func open(expedition: RefCounted, organization_level: int = 0) -> void:
 	close.grab_focus()
 
 func _refresh() -> void:
+	guild_level = flow.guild_level()
 	for child in rows.get_children():
 		rows.remove_child(child)
 		child.queue_free()
@@ -54,7 +61,9 @@ func _refresh() -> void:
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		label.add_theme_font_size_override("font_size", 18)
 		label.text = "%s · %s\n%s · %s\n奖励：%d 金币、%d 经验" % [entry.name, {"available": "未接取", "active": "进行中", "claimed": "已交付"}[state], entry.goal, Quests.progress(run.character, id), entry.gold, entry.xp]
-		if id == "familia_patrol": label.text += "\n当前眷族等级：%d · 仅接取后的实际编队胜利计入。" % guild_level
+		if id == "familia_patrol":
+			label.text += ("\n当前眷族等级：%d" % guild_level if guild_level > 0 else ("\n未加入眷族" if run.character.familia_id.is_empty() else "\n共享资格不可用，请恢复同一玩家备份后刷新")) + " · 仅接取后的实际编队胜利计入。"
+		if id == "depth_five": label.text += "\n只记录接取后的抵达楼层；返回和再次出发保留最高进度。"
 		rows.add_child(label)
 		var button := Button.new()
 		button.custom_minimum_size.y = 38
@@ -68,11 +77,16 @@ func _refresh() -> void:
 	feedback.text = "每个角色每条委托仅交付一次；接取和交付后仍需手动保存。"
 
 func _act(id: String, action: String) -> void:
-	if run.quest_service(id, action, guild_level):
+	if flow.run != run:
+		feedback.text = "当前角色已变化，请重新打开委托。"
+		return
+	if flow.quest_service(id, action):
 		_refresh()
 		feedback.text = run.message
 		changed.emit()
-	else: feedback.text = "当前条件不满足，资源保留。"
+	else:
+		_refresh()
+		feedback.text = "当前条件不满足，资源保留。"
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
