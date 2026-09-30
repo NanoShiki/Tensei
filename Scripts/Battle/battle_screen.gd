@@ -326,6 +326,49 @@ func _settle() -> void:
 		flow.active_character = battle.hero.duplicate(true)
 		if flow.run != null: flow.settle_battle(battle.hero, battle.ally, battle.outcome == "victory", battle.scout)
 
+func gm_recovery_reason(action: String) -> String:
+	if action not in ["restore_party", "refill_potions"]: return "未知测试操作"
+	if busy: return "请等待当前动作结束"
+	for child in get_children():
+		if child is Window and child.visible: return "请先关闭当前窗口"
+	if map_visible:
+		if flow == null or flow.run == null or flow.run.phase not in ["city", "descending", "returning"] or not flow.run.pending.is_empty() or not flow.run.has_living_party(): return "当前旅程无法操作"
+		if action == "restore_party" and (flow.run.character.party_enlisted or flow.run.character.scout_enlisted):
+			if flow.progress.data.get("player_id") != flow.run.character.player_id: return "共享档案不可用，请恢复同一玩家备份"
+	elif battle == null or battle.outcome != "ongoing": return "当前战斗已结束"
+	return ""
+
+func gm_recovery(action: String) -> bool:
+	if not gm_recovery_reason(action).is_empty(): return false
+	if map_visible and action == "restore_party" and (flow.run.character.party_enlisted or flow.run.character.scout_enlisted) and flow.guild_level() == 0:
+		preload("res://Scripts/Core/game_log.gd").event("gm", "recovery_rejected", {"action": action, "reason": "共享档案不可用，保留原状态"}, "WARN")
+		return false
+	var before: Dictionary = flow.run.log_state() if map_visible else battle.log_state()
+	var hero: Dictionary = flow.run.character if map_visible else battle.hero
+	var limits := {"lorn": hero.max_hp}
+	if action == "refill_potions":
+		hero.potions = maxi(10, hero.potions)
+		hero.fire_potions = maxi(10, hero.fire_potions)
+	elif map_visible:
+		if hero.hp > 0: hero.hp = hero.max_hp
+		for id in ["squire", "scout"]:
+			var prefix := "party" if id == "squire" else "scout"
+			if hero[prefix + "_enlisted"] and hero[prefix + "_hp"] > 0:
+				limits[id] = flow.party_companion(id).max_hp
+				hero[prefix + "_hp"] = limits[id]
+	else:
+		for member in battle.friends():
+			limits[member.id] = member.max_hp
+			if member.hp > 0: member.hp = member.max_hp
+	var after: Dictionary = flow.run.log_state() if map_visible else battle.log_state()
+	preload("res://Scripts/Core/game_log.gd").event("gm", action, {"scope": "map" if map_visible else "battle", "limits": limits, "before": before, "after": after})
+	selected = ""
+	if map_visible:
+		flow.active_character = hero.duplicate(true)
+		show_floor_map()
+	else: _refresh()
+	return true
+
 func gm_kill_reason() -> String:
 	if map_visible or battle == null: return "请先进入战斗"
 	if battle.outcome != "ongoing" or _settled: return "战斗已结束"
