@@ -36,6 +36,20 @@ def inspect(paths):
             if row["level"] == "ERROR":
                 errors.append(label + ": " + str(row["data"].get("message", row["data"])))
             data = row["data"]
+            if row["category"] == "battle" and row["event"] == "attack" and "rolls" in data:
+                try:
+                    rolls = data["rolls"]
+                    assert all(isinstance(roll, int) and 1 <= roll <= 20 for roll in rolls), "attack dice bounds"
+                    expected_mode = "advantage" if data["advantage"] and not data["guarded"] else ("disadvantage" if data["guarded"] and not data["advantage"] else "normal")
+                    assert data["roll_mode"] == expected_mode, "attack advantage cancellation"
+                    assert len(rolls) == (1 if expected_mode == "normal" else 2), "attack dice count"
+                    assert data["roll"] == (max(rolls) if expected_mode == "advantage" else min(rolls)), "attack selected die"
+                    if data["actor"] == "goblin":
+                        assert data["advantage"] == (data["content_id"] == "prowler"), "enemy attack profile"
+                    expected_hit = data["roll"] == 20 or (data["roll"] != 1 and data["roll"] + data["modifier"] >= data["ac"])
+                    assert data["hit"] == expected_hit, "attack hit result"
+                except (KeyError, TypeError, AssertionError, ValueError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "job" and row["event"] == "select":
                 try:
                     before, after = data["before"], data["after"]

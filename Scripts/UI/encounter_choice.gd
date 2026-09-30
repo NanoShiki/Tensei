@@ -30,14 +30,14 @@ func open(preview: Dictionary, expedition: RefCounted) -> void:
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text.add_theme_font_size_override("font_size", 19)
 	text.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	text.text = "前方：%s\n\n交战：胜利获得战利品并清理节点。\n绕行：消耗灼烧药水 ×1（持有 %d），怪物保留，无战利品，不完成讨伐。\n\n确认后移动 1 步；取消不移动、不消耗。" % [preview.name, preview.stock]
+	text.text = "前方：%s\n%s\n\n交战：胜利获得战利品并清理节点。\n绕行：消耗灼烧药水 ×1（持有 %d），怪物保留，无战利品，不完成讨伐。\n\n确认后移动 1 步；取消不移动、不消耗。" % [preview.name, preview.get("details", ""), preview.stock]
 	box.add_child(text)
 	fight_button = _button(box, "进入交战", func(): _decide(false))
 	avoid_button = _button(box, "消耗灼烧药水 ×1 · 掩护绕行", func(): _decide(true))
 	avoid_button.disabled = not preview.can_avoid
 	avoid_button.tooltip_text = "灼烧药水不足，可交战或取消。" if avoid_button.disabled else "怪物保留；再次经过还会遭遇。"
 	cancel_button = _button(box, "取消", _cancel)
-	popup_centered(Vector2i(640, 390))
+	popup_centered(Vector2i(680, 450))
 	cancel_button.grab_focus()
 
 func _button(box: VBoxContainer, text: String, callback: Callable) -> Button:

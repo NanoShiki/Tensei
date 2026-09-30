@@ -150,6 +150,7 @@ class LogCheckerTests(unittest.TestCase):
             path = Path(directory) / "events-test.jsonl"
             path.write_text(json.dumps(row), encoding="utf-8")
             self.assertEqual(inspect([path])[1], [])
+
             after["hero"]["growth_pending"] = []
             path.write_text(json.dumps(row), encoding="utf-8")
             self.assertIn("job selection changed unrelated progress", inspect([path])[1][0])
@@ -164,6 +165,24 @@ class LogCheckerTests(unittest.TestCase):
             before["hero"]["level"] = after["hero"]["level"] = 2
             path.write_text(json.dumps(row), encoding="utf-8")
             self.assertEqual(inspect([path])[1], [])
+
+    def test_enemy_advantage_cancelled_by_guard(self):
+        data = {"rolls": [4, 17], "roll": 17, "roll_mode": "advantage", "advantage": True,
+            "guarded": False, "actor": "goblin", "content_id": "prowler", "modifier": 4, "ac": 14, "hit": True}
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "battle", "event": "attack", "data": data}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            data["roll"] = 4
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("attack selected die", inspect([path])[1][0])
+            data.update(rolls=[4], roll_mode="normal", guarded=True, hit=False)
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            data["roll_mode"] = "advantage"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("attack advantage cancellation", inspect([path])[1][0])
 
 
 if __name__ == "__main__":

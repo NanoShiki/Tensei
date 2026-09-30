@@ -60,7 +60,7 @@ func _run() -> void:
 	await process_frame
 	check(screen.map_visible, "地图入口")
 	for id in ["1a", "1b"]:
-		check(screen.map_buttons[id].text.contains("怪物在场"), "入口只揭示下一步分支")
+		check(screen.map_buttons[id].text.contains("哥布林"), "入口只揭示下一步敌人类型")
 	for id in ["2a", "2b", "3a", "3b", "exit"]:
 		check(screen.map_buttons[id].text == "未到访\n未知" and screen.map_buttons[id].disabled, "远处节点隐藏类型和状态")
 		check(not screen.map_buttons[id].tooltip_text.contains("刷新"), "远处悬停不透露怪物状态")
@@ -79,7 +79,7 @@ func _run() -> void:
 	var before_return: Dictionary = flow.run.character.duplicate(true)
 	screen.expedition_button.pressed.emit()
 	check(flow.run.phase == "returning" and not screen.map_buttons["1a"].disabled, "返程按钮启动并高亮上一节点")
-	check(screen.map_buttons["1b"].text.contains("怪物在场") and screen.map_buttons["3a"].text.contains("未知"), "返回时揭示下一步上行分支，隐藏未到访下行分支")
+	check(screen.map_buttons["1b"].text.contains("迅足哥布林") and screen.map_buttons["3a"].text.contains("未知"), "返回时揭示下一步上行敌人，隐藏未到访下行分支")
 	var direction_steps: int = flow.run.steps_taken
 	screen.direction_button.pressed.emit()
 	check(flow.run.phase == "descending" and not screen.map_buttons["3a"].disabled, "继续深入按钮重新启用向下节点")

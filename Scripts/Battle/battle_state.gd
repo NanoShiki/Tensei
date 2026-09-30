@@ -4,6 +4,7 @@ const Log = preload("res://Scripts/Core/game_log.gd")
 const Abilities = preload("res://Scripts/Battle/ability_library.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 const Jobs = preload("res://Scripts/Character/job_library.gd")
+const Enemies = preload("res://Scripts/Battle/enemy_library.gd")
 var battle_id := ""
 var hero: Dictionary
 var enemy: Dictionary
@@ -20,20 +21,15 @@ var logs: Array[String] = []
 var last_event: Dictionary = {}
 var charging := false
 
-func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1, captain: bool = false, companion: Dictionary = {}) -> void:
+func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1, captain: bool = false, companion: Dictionary = {}, enemy_kind: String = "goblin") -> void:
 	battle_id = Crypto.new().generate_random_bytes(8).hex_encode()
 	hero = character.duplicate(true)
 	hero["surge"] = 1
 	ally = companion.duplicate(true)
 	if not ally.is_empty(): ally["surge"] = 1
 	ally_guarding = false
-	enemy = {"id": "goblin", "name": "哥布林", "max_hp": 22 + mini(floor_number - 1, 20),
-		"ac": 12, "attack": 3, "dex": 1}
-	enemy["captain"] = captain
+	enemy = Enemies.resolve("captain" if captain else enemy_kind, floor_number)
 	charging = false
-	if captain:
-		enemy.merge({"name": "守关队长", "max_hp": 44, "ac": 13, "attack": 4, "dex": 1}, true)
-	enemy["hp"] = enemy.max_hp
 	if seed_value < 0:
 		rng.randomize()
 	else:
@@ -126,10 +122,19 @@ func _use_ability(id: String, target: String) -> bool:
 	_check_outcome()
 	return true
 
-func _attack(attacker: Dictionary, target: Dictionary, die: int, damage_bonus: int, penalty: int = 0) -> void:
+func _attack(attacker: Dictionary, target: Dictionary, die: int, damage_bonus: int, penalty: int = 0, advantage: bool = false) -> void:
 	var roll := rng.randi_range(1, 20)
-	if (target.id == "lorn" and guarding) or (target.id == "squire" and ally_guarding):
-		roll = mini(roll, rng.randi_range(1, 20))
+	var rolls := [roll]
+	var guarded: bool = (target.id == "lorn" and guarding) or (target.id == "squire" and ally_guarding)
+	var mode := "normal"
+	if advantage and not guarded:
+		rolls.append(rng.randi_range(1, 20))
+		roll = maxi(roll, rolls[1])
+		mode = "advantage"
+	elif guarded and not advantage:
+		rolls.append(rng.randi_range(1, 20))
+		roll = mini(roll, rolls[1])
+		mode = "disadvantage"
 	var modifier := int(attacker.attack) - penalty
 	var hit := roll == 20 or (roll != 1 and roll + modifier >= int(target.ac))
 	var damage := 0
@@ -140,7 +145,7 @@ func _attack(attacker: Dictionary, target: Dictionary, die: int, damage_bonus: i
 	var text := ("暴击 −%d" if roll == 20 else "−%d") % damage if hit else "未命中"
 	logs.append("%s：d20(%d)+%d 对 AC %d → %s" % [attacker.name, roll, modifier, target.ac, text])
 	last_event = {"actor": attacker.id, "target": target.id, "text": text}
-	Log.event("battle", "attack", {"battle_id": battle_id, "actor": attacker.id, "target": target.id, "roll": roll, "modifier": modifier, "ac": target.ac, "hit": hit, "damage": damage, "remaining_hp": target.hp})
+	Log.event("battle", "attack", {"battle_id": battle_id, "actor": attacker.id, "content_id": attacker.get("content_id", ""), "target": target.id, "roll": roll, "rolls": rolls, "roll_mode": mode, "advantage": advantage, "guarded": guarded, "modifier": modifier, "ac": target.ac, "hit": hit, "damage": damage, "remaining_hp": target.hp})
 
 func end_turn() -> bool:
 	var before := log_state()
@@ -169,13 +174,14 @@ func _enemy_turn() -> bool:
 	else:
 		var recipient := hero
 		if not ally.is_empty() and ally.hp > 0 and (hero.hp <= 0 or rng.randi_range(0, 1) == 1): recipient = ally
-		_attack(enemy, recipient, 10 if enemy.captain else 6, 4 if enemy.captain else 1)
+		_attack(enemy, recipient, enemy.die, enemy.bonus, 0, enemy.advantage)
 		charging = false
 	_check_outcome()
 	if outcome == "ongoing": _advance()
 	return true
 
 func enemy_intent() -> String:
+	if enemy.get("content_id") in ["armored", "prowler"]: return "敌方意图：" + str(Enemies.ENTRIES[enemy.content_id].threat)
 	if not enemy.get("captain", false): return ""
 	return ("敌方意图：重击 · 随机攻击存活成员；闪避仅保护自身" if not ally.is_empty() else "敌方意图：重击 · 命中 +4 · 1d10+4；可用闪避应对") if charging else "敌方意图：蓄力 · 本次不攻击，下次行动重击"
 

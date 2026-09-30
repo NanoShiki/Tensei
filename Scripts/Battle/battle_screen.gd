@@ -2,6 +2,7 @@ extends Control
 
 const BattleState = preload("res://Scripts/Battle/battle_state.gd")
 const Abilities = preload("res://Scripts/Battle/ability_library.gd")
+const Enemies = preload("res://Scripts/Battle/enemy_library.gd")
 const Jobs = preload("res://Scripts/Character/job_library.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 const GOLD := Color("d6b77a")
@@ -130,7 +131,7 @@ func start_encounter() -> void:
 		if flow.run != null:
 			character = flow.run.character
 			floor_number = flow.run.floor_number
-	battle.setup(character, floor_number, -1, flow != null and flow.run != null and flow.run.is_captain_node(flow.run.pending), BattleState.practice_companion() if party_practice else (flow.party_companion() if flow != null and flow.run != null else {}))
+	battle.setup(character, floor_number, -1, flow != null and flow.run != null and flow.run.is_captain_node(flow.run.pending), BattleState.practice_companion() if party_practice else (flow.party_companion() if flow != null and flow.run != null else {}), str(flow.run.node(flow.run.pending).get("enemy_kind", "goblin")) if flow != null and flow.run != null else "goblin")
 	_refresh()
 	_drive_enemy()
 
@@ -156,7 +157,7 @@ func _refresh() -> void:
 	else:
 		_unit("lorn", battle.hero, Rect2(202, 145, 294, 340), "res://Assets/Battle/lorn.png")
 	_unit("goblin", battle.enemy, Rect2(833, 205, 222, 302), "res://Assets/Battle/goblin.png")
-	if battle.enemy.captain:
+	if not battle.enemy_intent().is_empty():
 		_label(battle.enemy_intent(), Rect2(500, 90, 730, 36), 18, GOLD)
 	var message := "选择技能，再点击高亮目标。"
 	if busy or battle.current_id() == "goblin": message = str(battle.enemy.name) + "正在行动…"
@@ -206,6 +207,7 @@ func _unit(id: String, data: Dictionary, rect: Rect2, path: String) -> void:
 	texture.size = rect.size
 	texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if id == "goblin": texture.modulate = Color(data.get("tint", "ffffff"))
 	if id == "squire": texture.modulate = Color("94c9da")
 	if data.hp <= 0: texture.modulate = Color(0.5, 0.5, 0.5, 0.45)
 	canvas.add_child(texture)
@@ -385,7 +387,7 @@ func show_floor_map() -> void:
 		var visit_text := "已到访" if item.visited else "未到访"
 		var status: String = names[item.kind]
 		if item.kind == "battle":
-			status = ("守关队长" if run.is_captain_node(item.id) else "怪物在场") if item.enemy_active else "刷新还需 %d 步" % item.respawn_in
+			status = str(Enemies.ENTRIES[item.enemy_kind].name) if item.enemy_active else "刷新还需 %d 步" % item.respawn_in
 		elif item.kind == "rest" and item.reward_claimed: status = "营地 · 已休整"
 		elif item.kind == "cache" and item.reward_claimed: status = "补给 · 已领取"
 		var title: String = (position_text + " · " if not position_text.is_empty() else "") + visit_text + "\n" + status
@@ -396,7 +398,7 @@ func show_floor_map() -> void:
 		if not revealed:
 			button.tooltip_text = "靠近至下一步可选节点后显示详情；已到访节点保留详情。"
 		if revealed and item.kind == "battle":
-			button.tooltip_text = "每次合法移动先扣一步，再检查目的地。" + ("此处剩 1 步，进入时将遇敌。" if item.respawn_in == 1 and not item.enemy_active else "停留、预览和战斗回合不推进刷新。")
+			button.tooltip_text = Enemies.preview(item.enemy_kind, run.floor_number) + "\n每次合法移动先扣一步，再检查目的地。" + ("此处剩 1 步，进入时将遇敌。" if item.respawn_in == 1 and not item.enemy_active else "停留、预览和战斗回合不推进刷新。")
 			if item.cleared:
 				var progress := ColorRect.new()
 				progress.position = _node_position(item) + Vector2(4, 61)
