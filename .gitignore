@@ -6,3 +6,7 @@
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Python verification cache
+__pycache__/
+*.pyc
