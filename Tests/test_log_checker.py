@@ -53,6 +53,23 @@ class LogCheckerTests(unittest.TestCase):
             path.write_text(json.dumps(row), encoding="utf-8")
             self.assertIn("duplicate quest reward", inspect([path])[1][0])
 
+    def test_ally_healing_requires_an_action_and_shared_potion(self):
+        before = {"actor": "lorn", "actions": 1, "hero": {"hp": 36, "max_hp": 36, "potions": 3},
+            "ally": {"hp": 10, "max_hp": 28}, "enemy": {"hp": 22, "max_hp": 22}}
+        after = json.loads(json.dumps(before))
+        after["actions"] = 0
+        after["hero"]["potions"] = 2
+        after["ally"]["hp"] = 22
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "battle",
+               "event": "use_ability", "data": {"input": {"ability": "potion", "target": "squire"}, "success": True, "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["actions"] = 1
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("ability action cost", inspect([path])[1][0])
+
     def test_detects_movement_violation_and_error(self):
         before = {"steps": 0, "respawn": {}}
         after = {"steps": 1, "hero": {"hp": 20, "max_hp": 36, "gold": 0,
