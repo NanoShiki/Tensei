@@ -102,6 +102,8 @@ def inspect(paths):
                 if action in ("enter", "step_return") and data.get("input", {}).get("avoid"):
                     old = before["hero"]
                     assert hero["fire_potions"] == old["fire_potions"] - 1, "avoidance potion cost"
+                    expected_hero = dict(old, fire_potions=old["fire_potions"] - 1)
+                    assert hero == expected_hero, "avoidance changed other character progress"
                     assert after["pending"] == "" and after["wins"] == before["wins"], "avoidance counted as victory"
                     assert hero["hp"] == old["hp"] and hero["gold"] == old["gold"] and hero["scrap"] == old["scrap"], "avoidance awarded loot or damaged hero"
                     assert hero.get("captain_defeated") == old.get("captain_defeated"), "avoidance completed captain"

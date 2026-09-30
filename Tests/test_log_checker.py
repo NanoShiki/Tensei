@@ -36,7 +36,7 @@ class LogCheckerTests(unittest.TestCase):
             self.assertEqual(inspect([path])[1], [])
             after["hero"]["gold"] = 3
             path.write_text(json.dumps(row), encoding="utf-8")
-            self.assertIn("avoidance awarded loot", inspect([path])[1][0])
+            self.assertIn("avoidance changed other character progress", inspect([path])[1][0])
 
     def test_quest_rewards_cannot_repeat(self):
         before = {"steps": 0, "respawn": {}, "phase": "city", "hero": {"gold": 0, "scrap": 3,
