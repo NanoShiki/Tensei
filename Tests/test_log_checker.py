@@ -137,6 +137,34 @@ class LogCheckerTests(unittest.TestCase):
             path.write_text(json.dumps(row), encoding="utf-8")
             self.assertIn("duplicate shared reward", inspect([path])[1][0])
 
+    def test_job_selection_preserves_progress_and_checks_skill_level(self):
+        before = {"phase": "city", "steps": 0, "respawn": {}, "message": "ready", "hero": {
+            "job_id": "swordsman", "ac": 14, "attack": 5, "dex": 2, "gold": 9, "hp": 30,
+            "familia_id": "dawn", "party_hp": 10, "growth_pending": ["queued"]}}
+        after = json.loads(json.dumps(before))
+        after["hero"].update(job_id="mage", ac=12, attack=5, dex=1)
+        after["message"] = "changed"
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "job",
+            "event": "select", "data": {"id": "mage", "success": True, "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["hero"]["growth_pending"] = []
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("job selection changed unrelated progress", inspect([path])[1][0])
+            before = {"actor": "lorn", "actions": 1, "hero": {"job_id": "mage", "level": 1, "hp": 36, "max_hp": 36},
+                "enemy": {"hp": 22, "max_hp": 22}}
+            after = json.loads(json.dumps(before))
+            after["actions"] = 0
+            after["enemy"]["hp"] = 12
+            row.update(category="battle", event="use_ability", data={"input": {"ability": "arcane_bolt", "target": "goblin"}, "success": True, "before": before, "after": after})
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("job skill qualification", inspect([path])[1][0])
+            before["hero"]["level"] = after["hero"]["level"] = 2
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -36,6 +36,20 @@ def inspect(paths):
             if row["level"] == "ERROR":
                 errors.append(label + ": " + str(row["data"].get("message", row["data"])))
             data = row["data"]
+            if row["category"] == "job" and row["event"] == "select":
+                try:
+                    before, after = data["before"], data["after"]
+                    if not data["success"]:
+                        assert before == after, "rejected job changed state"
+                    else:
+                        assert before["phase"] == "city", "job selected outside city"
+                        ac, attack, dex = {"swordsman": (14, 5, 2), "mage": (12, 5, 1), "archer": (13, 6, 3), "rogue": (13, 5, 4)}[data["id"]]
+                        expected = json.loads(json.dumps(before))
+                        expected["hero"].update(job_id=data["id"], ac=ac, attack=attack, dex=dex)
+                        expected["message"] = after["message"]
+                        assert expected == after, "job selection changed unrelated progress"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "familia":
                 try:
                     if row["event"] == "victory_growth" and data["success"]:
@@ -121,6 +135,9 @@ def inspect(paths):
                         old = data["before"]
                         assert old["actor"] in ("lorn", "squire") and old["actions"] > 0 and state["actions"] == old["actions"] - 1, "ability action cost"
                         ability, target = data["input"]["ability"], data["input"]["target"]
+                        if ability in ("arcane_bolt", "aimed_shot", "ambush"):
+                            actor = old["hero"] if old["actor"] == "lorn" else old["ally"]
+                            assert actor.get("job_id") == {"arcane_bolt": "mage", "aimed_shot": "archer", "ambush": "rogue"}[ability] and actor.get("level", 1) >= 2, "job skill qualification"
                         if ability in ("potion", "fire_potion"):
                             stock = "potions" if ability == "potion" else "fire_potions"
                             assert state["hero"][stock] == old["hero"][stock] - 1, "battle potion stock"

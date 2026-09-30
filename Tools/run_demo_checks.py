@@ -15,7 +15,7 @@ import time
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-LOG_SCENARIOS = {"test_city_loop", "test_inventory", "test_stage_boss", "test_quests_growth", "test_encounter_choice", "test_party_combat", "test_party_expedition"}
+LOG_SCENARIOS = {"test_city_loop", "test_inventory", "test_stage_boss", "test_quests_growth", "test_encounter_choice", "test_party_combat", "test_party_expedition", "test_jobs"}
 
 
 def classify(returncode, output, require_completion=True):

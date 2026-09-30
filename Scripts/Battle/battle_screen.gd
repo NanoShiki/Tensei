@@ -2,6 +2,7 @@ extends Control
 
 const BattleState = preload("res://Scripts/Battle/battle_state.gd")
 const Abilities = preload("res://Scripts/Battle/ability_library.gd")
+const Jobs = preload("res://Scripts/Character/job_library.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 const GOLD := Color("d6b77a")
 const PAPER := Color("e9e4d7")
@@ -171,9 +172,9 @@ func _refresh() -> void:
 	_label("%s · 布衣\n护甲 AC %d · 命中 +%d\n剑技伤害加成 +%d" % [CharacterLibrary.weapon_name(actor), actor.ac, actor.attack, CharacterLibrary.weapon_bonus(actor)], Rect2(36, 577, 226, 70), 16)
 	_label("生命 %d / %d" % [actor.hp, actor.max_hp], Rect2(36, 652, 225, 26), 18, Color("9fc0a0"))
 	_panel(Rect2(291, 529, 448, 170))
-	_label("技能", Rect2(307, 541, 60, 24), 17, GOLD)
-	_label("剩余行动  %d   ·   每回合 1 次" % battle.action, Rect2(388, 541, 355, 24), 16, MUTED)
-	var ids := ["strike", "power", "guard", "surge"]
+	_label("技能 / " + str(Jobs.resolve(actor).name), Rect2(307, 541, 150, 24), 17, GOLD)
+	_label("行动 %d · 每回合 1 次" % battle.action, Rect2(472, 541, 260, 24), 16, MUTED)
+	var ids: Array = Jobs.skills(actor)
 	for i in range(ids.size()): _ability_button(ids[i], Rect2(305 + i * 106, 578, 94, 96))
 	_panel(Rect2(752, 529, 229, 170))
 	_label("道具 / 治疗 %d · 灼烧 %d" % [battle.hero.potions, battle.hero.fire_potions], Rect2(765, 541, 210, 24), 17, GOLD)
@@ -248,10 +249,10 @@ func _ability_button(id: String, rect: Rect2) -> void:
 	button.tooltip_text = entry.hint + ("\n" + reason if not reason.is_empty() else "")
 	if entry.has("die"):
 		var actor: Dictionary = battle.current_unit() if battle.is_player_turn() else battle.hero
-		button.tooltip_text = "1 行动 · 命中 +%d · 1d%d+%d 伤害" % [int(actor.attack) - int(entry.get("penalty", 0)), entry.die, int(entry.bonus) + CharacterLibrary.weapon_bonus(actor)] + ("\n" + reason if not reason.is_empty() else "")
+		button.tooltip_text = "1 行动 · 命中 +%d · 1d%d+%d 伤害" % [int(actor.attack) - int(entry.get("penalty", 0)), entry.die, int(entry.bonus) + (CharacterLibrary.weapon_bonus(actor) if entry.get("weapon_bonus", true) else 0)] + ("\n" + reason if not reason.is_empty() else "")
 	var icon := TextureRect.new()
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.texture = load("res://Assets/Battle/%s.svg" % id)
+	icon.texture = load("res://Assets/Battle/%s.svg" % entry.get("asset", id))
 	icon.position = Vector2((rect.size.x - 40) / 2, 8)
 	icon.size = Vector2(40, 40)
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -462,7 +463,8 @@ func _show_city() -> void:
 	_panel(Rect2(30, 112, 410, 402))
 	_label(_party_status(), Rect2(52, 455, 370, 45), 16, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label("%s · 等级 %d" % [str(flow.profile.get("name", "角色")).left(12), hero.level], Rect2(52, 137, 370, 40), 23, GOLD)
-	_label("生命 %d / %d · 经验 %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s" % [hero.hp, hero.max_hp, hero.experience, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero)], Rect2(52, 202, 365, 260), 23)
+	city_buttons["job"] = _button("职业：%s · 查看与切换" % Jobs.resolve(hero).name, Rect2(52, 183, 365, 34), _open_jobs)
+	_label("生命 %d / %d · 经验 %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s" % [hero.hp, hero.max_hp, hero.experience, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero)], Rect2(52, 226, 365, 225), 23)
 	_panel(Rect2(468, 112, 780, 402))
 	_label("阶段目标：已击败守关队长 · 可继续探索" if hero.captain_defeated else "阶段目标：打造铁剑，挑战第 3 层守关队长并回城", Rect2(42, 72, 1190, 32), 19, GOLD)
 	_label("休整与工坊", Rect2(496, 137, 700, 40), 24, GOLD)
@@ -479,7 +481,8 @@ func _show_city() -> void:
 	city_buttons["depart"] = _button("准备完毕 · 从第一层出发", Rect2(420, 620, 440, 58), _depart_city, true)
 
 func _city_service(action: String) -> void:
-	if flow.city_service(action): show_floor_map()
+	flow.city_service(action)
+	show_floor_map()
 
 func _depart_city() -> void:
 	if flow.run.depart_city(randi()): show_floor_map()
@@ -524,7 +527,7 @@ func _input(event: InputEvent) -> void:
 		elif event.keycode == KEY_SPACE:
 			_end_turn()
 		elif event.keycode >= KEY_1 and event.keycode <= KEY_6:
-			_select(["strike", "power", "guard", "surge", "potion", "fire_potion"][event.keycode - KEY_1])
+			_select((Jobs.skills(battle.current_unit()) + ["potion", "fire_potion"])[event.keycode - KEY_1])
 
 func _choose_node(id: String, return_key: String) -> void:
 	if not map_visible: return
@@ -544,11 +547,25 @@ func _move_choice(id: String, return_key: String, avoid: bool) -> void:
 	if return_key.is_empty(): _enter_node(id, avoid)
 	else: _return_step(return_key, avoid)
 
+func _open_jobs() -> void:
+	if not _can_open_city_board(): return
+	var board := preload("res://Scripts/UI/job_board.gd").new()
+	add_child(board)
+	board.changed.connect(show_floor_map)
+	board.open(flow.run)
+
 func _open_familia() -> void:
+	if not _can_open_city_board(): return
 	var board := preload("res://Scripts/UI/familia_board.gd").new()
 	add_child(board)
 	board.changed.connect(show_floor_map)
 	board.open(flow)
+
+func _can_open_city_board() -> bool:
+	if not map_visible or flow == null or flow.run == null or flow.run.phase != "city" or not flow.run.pending.is_empty(): return false
+	for child in get_children():
+		if child is Window and child.visible: return false
+	return true
 
 func _open_quests() -> void:
 	if flow == null or flow.run == null or flow.run.phase != "city": return
