@@ -77,6 +77,8 @@ def inspect(paths):
                     state = data["after"]
                     assert all(0 <= state[k]["hp"] <= state[k]["max_hp"] for k in ("hero", "enemy")), "battle health bounds"
                     assert state["actions"] >= 0, "negative actions"
+                    if state.get("ally"):
+                        assert 0 <= state["ally"]["hp"] <= state["ally"]["max_hp"], "ally health bounds"
                     if not data["success"]:
                         assert data["before"] == state, "rejected action changed state"
                 except (KeyError, TypeError, AssertionError) as exc:

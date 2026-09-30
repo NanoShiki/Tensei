@@ -247,7 +247,8 @@ func _ability_button(id: String, rect: Rect2) -> void:
 	button.disabled = busy or not reason.is_empty()
 	button.tooltip_text = entry.hint + ("\n" + reason if not reason.is_empty() else "")
 	if entry.has("die"):
-		button.tooltip_text = "1 行动 · 命中 +%d · 1d%d+%d 伤害" % [int(battle.current_unit().attack) - int(entry.get("penalty", 0)), entry.die, int(entry.bonus) + CharacterLibrary.weapon_bonus(battle.current_unit())] + ("\n" + reason if not reason.is_empty() else "")
+		var actor: Dictionary = battle.current_unit() if battle.is_player_turn() else battle.hero
+		button.tooltip_text = "1 行动 · 命中 +%d · 1d%d+%d 伤害" % [int(actor.attack) - int(entry.get("penalty", 0)), entry.die, int(entry.bonus) + CharacterLibrary.weapon_bonus(actor)] + ("\n" + reason if not reason.is_empty() else "")
 	var icon := TextureRect.new()
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.texture = load("res://Assets/Battle/%s.svg" % id)
@@ -531,6 +532,7 @@ func _open_quests() -> void:
 
 func _toggle_practice() -> void:
 	if busy or (flow != null and flow.run != null): return
+	preload("res://Scripts/Core/game_log.gd").event("battle", "practice_switch", {"party": not party_practice, "previous": battle.log_state()})
 	party_practice = not party_practice
 	if flow != null: flow.active_character = CharacterLibrary.resolve()
 	start_encounter()
