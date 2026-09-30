@@ -54,6 +54,27 @@ func _initialize() -> void:
 	var invalid := Progress.initial()
 	invalid.familias.dawn.contribution = 1
 	check(not Progress.valid(invalid), "贡献与事件账本不一致拒绝")
+	var team := Progress.new()
+	team.base_path = base + "-team"
+	var legacy := Progress.initial()
+	legacy.familias.dawn.erase("scout_xp")
+	legacy.familias.dawn.events = {"legacy": true}
+	legacy.familias.dawn.contribution = 1
+	legacy.familias.dawn.squire_xp = 2
+	var payload := var_to_bytes(legacy)
+	write_data(team.base_path + ".0.save", {"version": 1, "content_version": "demo-familia-1", "generation": 1, "payload": payload, "checksum": team._checksum(payload)})
+	var original := FileAccess.get_file_as_bytes(team.base_path + ".0.save")
+	check(team.ensure() and team.data.player_id == legacy.player_id and team.data.familias.dawn.scout_xp == 0 and team.data.familias.dawn.events.legacy == ["squire"], "旧共享档案保持身份并补独立游侠成长")
+	check(FileAccess.get_file_as_bytes(team.base_path + ".0.save") == original, "读取迁移只在内存且保留原文件")
+	check(team.award_victory("scout-only", legacy.player_id, ["scout"]) and team.data.familias.dawn.scout_xp == 2 and team.data.familias.dawn.squire_xp == 2, "仅游侠参战不增加卫士经验")
+	check(team.award_victory("both", legacy.player_id, ["squire", "scout"]) and team.data.familias.dawn.contribution == 3 and team.data.familias.dawn.scout_xp == 4 and team.data.familias.dawn.squire_xp == 4, "两队友胜利组织贡献一次、各人经验分别增加")
+	var shared_before: Dictionary = team.data.duplicate(true)
+	check(team.award_victory("both", legacy.player_id, ["scout"]) and team.data == shared_before, "同一事件改参战名单重试也不重复成长")
+	check(not team.award_victory("wrong-members", legacy.player_id, ["scout", "scout"]) and team.data == shared_before, "重复参战成员拒绝原子提交")
+	invalid = team.data.duplicate(true)
+	invalid.familias.dawn.scout_xp += 2
+	check(not Progress.valid(invalid), "队友经验须与对应参战账本一致")
+	for suffix in [".0.save", ".1.save", ".tmp"]: DirAccess.remove_absolute(team.base_path + suffix)
 	for suffix in [".0.save", ".1.save", ".tmp"]:
 		if FileAccess.file_exists(base + suffix): DirAccess.remove_absolute(base + suffix)
 	print("PLAYER PROGRESS CHECKS: ", failures, " failures")
@@ -65,9 +86,9 @@ func _restart_check(phase: String) -> void:
 	assert(progress.base_path.begins_with("user://test-familia-"))
 	if phase == "write":
 		check(progress.ensure(), "独立进程建立共享身份")
-		for i in range(5): check(progress.award_victory("restart-" + str(i), progress.data.player_id), "独立进程写入共享成长")
+		for i in range(5): check(progress.award_victory("restart-" + str(i), progress.data.player_id, ["squire", "scout"]), "独立进程写入两位队友共享成长")
 	else:
-		check(progress.refresh() and progress.companion().level == 2 and progress.guild_level() == 2, "新进程恢复玩家身份、卫士和组织成长")
+		check(progress.refresh() and progress.companion().level == 2 and progress.companion("scout").level == 2 and progress.guild_level() == 2, "新进程恢复玩家身份、两位队友与组织成长")
 		var generation: int = progress.inspect().generation
 		check(progress.award_victory("restart-0", progress.data.player_id) and progress.inspect().generation == generation, "新进程恢复去重账本")
 		for suffix in [".0.save", ".1.save", ".tmp"]: DirAccess.remove_absolute(progress.base_path + suffix)
