@@ -442,12 +442,13 @@ func _enter_city() -> void:
 func _show_city() -> void:
 	var hero: Dictionary = flow.run.character
 	_label("城 市   /   整 备", Rect2(32, 18, 480, 42), 25, GOLD)
+	city_buttons["quests"] = _button("委托", Rect2(570, 22, 135, 40), _open_quests)
 	_button("背包 · B", Rect2(720, 22, 135, 40), _open_inventory)
 	_button("保存并退出", Rect2(870, 22, 175, 40), _request_save_exit)
 	_button("主菜单（未保存）", Rect2(1060, 22, 190, 40), _return_to_menu)
 	_panel(Rect2(30, 112, 410, 402))
-	_label("%s · 洛恩" % str(flow.profile.get("name", "角色")).left(16), Rect2(52, 137, 370, 40), 23, GOLD)
-	_label("生命 %d / %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s" % [hero.hp, hero.max_hp, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero)], Rect2(52, 202, 365, 260), 23)
+	_label("%s · 等级 %d" % [str(flow.profile.get("name", "角色")).left(12), hero.level], Rect2(52, 137, 370, 40), 23, GOLD)
+	_label("生命 %d / %d · 经验 %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s" % [hero.hp, hero.max_hp, hero.experience, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero)], Rect2(52, 202, 365, 260), 23)
 	_panel(Rect2(468, 112, 780, 402))
 	_label("阶段目标：已击败守关队长 · 可继续探索" if hero.captain_defeated else "阶段目标：打造铁剑，挑战第 3 层守关队长并回城", Rect2(42, 72, 1190, 32), 19, GOLD)
 	_label("休整与工坊", Rect2(496, 137, 700, 40), 24, GOLD)
@@ -508,3 +509,12 @@ func _input(event: InputEvent) -> void:
 			_end_turn()
 		elif event.keycode >= KEY_1 and event.keycode <= KEY_6:
 			_select(["strike", "power", "guard", "surge", "potion", "fire_potion"][event.keycode - KEY_1])
+
+func _open_quests() -> void:
+	if flow == null or flow.run == null or flow.run.phase != "city": return
+	for child in get_children():
+		if child is Window and child.visible: return
+	var board := preload("res://Scripts/UI/quest_board.gd").new()
+	add_child(board)
+	board.changed.connect(show_floor_map)
+	board.open(flow.run)
