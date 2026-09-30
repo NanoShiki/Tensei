@@ -33,4 +33,4 @@
 python Tools/run_demo_checks.py --godot "D:/Godot/godot/bin/godot.windows.editor.x86_64.console.exe"
 ```
 
-其他环境把 `--godot` 改为实际引擎路径，也可设置 `GODOT_BIN`。默认导入资源、运行全部 Godot 专项和 Python 工具测试；`--tests test_city_loop test_quests_growth` 可选单项。每组有超时、退出码、完成标记和引擎错误检查，终端打印 PASS／FAIL 与临时证据目录；查看 `summary.json` 和对应 `console.txt`、`engine.log`、事件 JSONL。部分错误注入专项的业务 ERROR 为预期，不自动计入日志规则；正常流程专项单独校验业务不变量。详细范围见 [运行日志与诊断](Docs/项目规范/运行日志与诊断.md)。画面与操作体验继续在 Godot 按 F5 验收。
+其他环境把 `--godot` 改为实际引擎路径，也可设置 `GODOT_BIN`。默认导入资源、运行全部 Godot 专项、两项存档的独立进程写／读和 Python 工具测试；`--tests test_city_loop test_quests_growth` 可选单项。每组有超时、退出码、完成标记和引擎错误检查，终端打印 PASS／FAIL 与临时证据目录；查看 `summary.json` 和对应 `console.txt`、`engine.log`、事件 JSONL。部分错误注入专项的业务 ERROR 为预期，不自动计入日志规则；正常流程专项单独校验业务不变量。详细范围见 [运行日志与诊断](Docs/项目规范/运行日志与诊断.md)。画面与操作体验继续在 Godot 按 F5 验收。

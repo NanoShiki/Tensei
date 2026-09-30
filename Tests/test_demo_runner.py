@@ -9,6 +9,7 @@ class DemoRunnerTests(unittest.TestCase):
     def test_requires_success_marker_and_no_engine_error(self):
         self.assertEqual(classify(0, "CITY LOOP CHECKS: 0 failures"), "")
         self.assertEqual(classify(0, "PASS: menu"), "")
+        self.assertEqual(classify(0, "CITY LOOP CHECKS:  0  failures"), "")
         self.assertTrue(classify(0, "Godot started"))
         self.assertTrue(classify(0, "SCRIPT ERROR: invalid call\nCITY LOOP CHECKS: 0 failures"))
         self.assertTrue(classify(1, "CITY LOOP CHECKS: 0 failures"))
