@@ -105,6 +105,8 @@ func _run() -> void:
 	check(flow.run.node("1a").respawn_in == countdown, "真实等待不扣刷新步数")
 	screen.expedition_button.pressed.emit()
 	screen.map_buttons["1b"].pressed.emit()
+	for child in screen.get_children():
+		if child is Window: child.fight_button.pressed.emit()
 	await create_timer(1.1).timeout
 	check(not screen.map_visible and flow.run.pending == "1b", "返程选择未走分支实际进入战斗界面")
 	screen.battle.enemy.hp = 0

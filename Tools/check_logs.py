@@ -47,6 +47,11 @@ def inspect(paths):
                         assert before == after, "rejected potion changed state"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
+            if row["category"] == "encounter" and row["event"] == "avoided":
+                try:
+                    assert data["enemy"]["enemy_active"] and data["enemy"]["visited"] and data["state"]["pending"] == "", "avoidance removed encounter"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "quest":
                 try:
                     before, after = data["before"], data["after"]
@@ -94,6 +99,14 @@ def inspect(paths):
                     for key, timer in before["respawn"].items():
                         new = after["respawn"][key]
                         assert new["remaining"] == max(0, timer["remaining"] - (not timer["active"])), "respawn countdown"
+                if action in ("enter", "step_return") and data.get("input", {}).get("avoid"):
+                    old = before["hero"]
+                    assert hero["fire_potions"] == old["fire_potions"] - 1, "avoidance potion cost"
+                    expected_hero = dict(old, fire_potions=old["fire_potions"] - 1)
+                    assert hero == expected_hero, "avoidance changed other character progress"
+                    assert after["pending"] == "" and after["wins"] == before["wins"], "avoidance counted as victory"
+                    assert hero["hp"] == old["hp"] and hero["gold"] == old["gold"] and hero["scrap"] == old["scrap"], "avoidance awarded loot or damaged hero"
+                    assert hero.get("captain_defeated") == old.get("captain_defeated"), "avoidance completed captain"
                 if action == "finish_battle" and data["input"]["victory"]:
                     assert after["wins"] == before["wins"] + 1, "victory counted once"
                     source = data["input"]["hero"]
@@ -105,6 +118,8 @@ def inspect(paths):
                         assert hero["hp"] == hero["max_hp"] and hero["gold"] == old["gold"], "free rest"
                     if service == "potion":
                         assert hero["gold"] == old["gold"] - 3 and hero["potions"] == old["potions"] + 1, "potion transaction"
+                    if service == "fire_potion":
+                        assert hero["gold"] == old["gold"] - 4 and hero["fire_potions"] == old["fire_potions"] + 1, "fire potion transaction"
                     if service == "forge":
                         assert hero["gold"] == old["gold"] - 6 and hero["scrap"] == old["scrap"] - 3 and hero["weapon"] == "iron_sword", "forge transaction"
                 if action == "depart_city":
