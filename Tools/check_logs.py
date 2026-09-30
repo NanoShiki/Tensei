@@ -123,6 +123,13 @@ def inspect(paths):
                     assert data["enemy"]["enemy_active"] and data["enemy"]["visited"] and data["state"]["pending"] == "", "avoidance removed encounter"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
+            if row["category"] == "objective" and row["event"] == "depth_progress":
+                try:
+                    assert data["state"]["hero"]["quests"]["depth_five"] == "active", "depth quest inactive"
+                    assert data["after"] == max(data["before"], min(5, data["floor"])) and data["after"] > data["before"], "depth progress formula"
+                    assert data["state"]["floor"] == data["floor"] and data["state"]["hero"]["depth_goal"] == data["after"], "depth progress state"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "quest":
                 try:
                     before, after = data["before"], data["after"]
@@ -138,11 +145,15 @@ def inspect(paths):
                             assert old["quests"][quest] == "available", "quest already accepted"
                             if quest == "familia_patrol":
                                 assert old["familia_id"] == "dawn" and data["guild_level"] >= 2, "member quest qualification"
+                            if quest == "depth_five":
+                                assert old["quests"]["captain"] == "claimed", "depth quest qualification"
                             expected["hero"]["quests"][quest] = "active"
                             expected["message"] = after.get("message")
                             assert expected == after, "accept changed resources"
                         elif row["event"] == "claim":
-                            gold, xp = {"hunt": (6, 10), "materials": (8, 15), "captain": (12, 25), "familia_patrol": (10, 20)}[quest]
+                            gold, xp = {"hunt": (6, 10), "materials": (8, 15), "captain": (12, 25), "familia_patrol": (10, 20), "depth_five": (15, 15)}[quest]
+                            if quest == "depth_five":
+                                assert old["depth_goal"] == 5, "depth quest incomplete"
                             if quest == "familia_patrol":
                                 assert old["familia_id"] == "dawn" and old["familia_wins"] == 5, "member quest incomplete"
                             assert old["quests"][quest] == "active" and hero["quests"][quest] == "claimed", "duplicate quest reward"

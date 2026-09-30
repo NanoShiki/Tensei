@@ -149,7 +149,7 @@ func _refresh() -> void:
 		var name_text: String = battle.unit(id).name
 		var active: bool = battle.current_id() == id
 		_panel(Rect2(565 + i * stride, 16, slot_width, 53), Color("29372e") if active else Color("19262b"), GOLD if active else Color("3c4948"))
-		_label(("▶  " if active else "    ") + name_text, Rect2(577 + i * stride, 28, slot_width - 18, 30), 18, GOLD if active else MUTED)
+		_label(("▶ " if active else "") + name_text, Rect2(571 + i * stride, 28, slot_width - 12, 30), 16 if battle.order.size() == 4 else 18, GOLD if active else MUTED)
 	_button("返回主菜单", Rect2(1090, 22, 158, 40), _return_to_menu)
 	if flow == null or flow.run == null:
 		_button("单人演练" if party_practice else "双人演练", Rect2(1090, 90, 158, 36), _toggle_practice)
@@ -426,6 +426,7 @@ func show_floor_map() -> void:
 	_panel(Rect2(24, 540, 1232, 155))
 	_label("生命 %d/%d · 治疗 %d · 灼烧 %d · 金币 %d · 铁片 %d" % [run.character.hp, run.character.max_hp, run.character.potions, run.character.fire_potions, run.character.gold, run.character.scrap], Rect2(48, 563, 1100, 36), 23, GOLD)
 	_label(_party_status(), Rect2(48, 597, 1100, 26), 16, MUTED)
+	_label(run.objective_text(), Rect2(40, 188, 1190, 30), 17, GOLD)
 	_label(run.message, Rect2(48, 627, 1150, 60), 20).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 func _begin_return() -> void:
@@ -479,7 +480,7 @@ func _show_city() -> void:
 	city_buttons["job"] = _button("职业：%s · 查看与切换" % Jobs.resolve(hero).name, Rect2(52, 183, 365, 34), _open_jobs)
 	_label("生命 %d / %d · 经验 %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s" % [hero.hp, hero.max_hp, hero.experience, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero)], Rect2(52, 226, 365, 225), 23)
 	_panel(Rect2(468, 112, 780, 402))
-	_label("阶段目标：已击败守关队长 · 可继续探索" if hero.captain_defeated else "阶段目标：打造铁剑，挑战第 3 层守关队长并回城", Rect2(42, 72, 1190, 32), 19, GOLD)
+	_label(flow.run.objective_text(), Rect2(42, 72, 1190, 32), 19, GOLD)
 	_label("休整与工坊", Rect2(496, 137, 700, 40), 24, GOLD)
 	city_buttons["rest"] = _button("旅店休整 · 免费恢复全部生命", Rect2(496, 192, 720, 46), _city_service.bind("rest"))
 	city_buttons["rest"].disabled = hero.hp >= hero.max_hp and (not hero.party_enlisted or (not flow.party_companion().is_empty() and hero.party_hp >= flow.party_companion().max_hp)) and (not hero.scout_enlisted or (not flow.party_companion("scout").is_empty() and hero.scout_hp >= flow.party_companion("scout").max_hp))
@@ -587,7 +588,7 @@ func _open_quests() -> void:
 	var board := preload("res://Scripts/UI/quest_board.gd").new()
 	add_child(board)
 	board.changed.connect(show_floor_map)
-	board.open(flow.run, flow.guild_level())
+	board.open(flow)
 
 func _toggle_practice() -> void:
 	if busy or (flow != null and flow.run != null): return

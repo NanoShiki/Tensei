@@ -27,10 +27,12 @@ func _run() -> void:
 	check(flow.familia_service("enlist_scout"), "游侠加入")
 	flow.run.depart_city(7)
 	check(flow.run.enter("1a") == "battle", "进入三人遭遇")
+	var event_id: String = flow.run.node(flow.run.pending).key + "/clear/1"
+	flow.run.character.growth_pending.append({"id": event_id, "members": ["squire", "scout"]})
 	DirAccess.make_dir_absolute(flow.progress.base_path + ".tmp")
 	check(flow.settle_battle(flow.run.character, flow.party_companion(), true, flow.party_companion("scout")), "共享不可写时个人战斗仍结算")
 	var queued: Array = flow.run.character.growth_pending.duplicate(true)
-	check(queued.size() == 1 and queued[0].members == ["squire", "scout"] and flow.progress.data.familias.dawn.scout_xp == 0, "失败保留完整参战名单且不伪造成长")
+	check(queued.size() == 1 and queued[0].members == ["squire", "scout"] and flow.progress.data.familias.dawn.scout_xp == 0, "已有同标识时不追加重复事件，失败保留完整参战名单且不伪造成长")
 	var profile_id: String = flow.profile.id
 	var record: String = flow.saves.save_record(flow.run, flow.profile, "三人待同步")
 	check(not record.is_empty() and flow.saves.read_record(profile_id, record).run.character.growth_pending == queued, "磁盘记录保留参战名单")

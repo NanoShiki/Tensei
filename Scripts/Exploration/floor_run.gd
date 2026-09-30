@@ -173,6 +173,12 @@ func _load_floor(level: int) -> void:
 		route.append(node_key(level, "entry"))
 	else:
 		generate_floor()
+	if character.quests.depth_five == "active":
+		var before: int = character.depth_goal
+		character.depth_goal = maxi(before, mini(5, level))
+		if character.depth_goal != before:
+			Log.context["run_id"] = run_id
+			Log.event("objective", "depth_progress", {"before": before, "after": character.depth_goal, "floor": level, "state": log_state()})
 
 func can_descend_floor() -> bool:
 	return phase == "descending" and current == "exit" and floor_number < total_floors and pending.is_empty() and not failed and has_living_party()
@@ -402,12 +408,17 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
 	data = data.duplicate(true)
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
-	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "job_id", "familia_wins", "scout_enlisted", "scout_hp"]:
+	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "job_id", "familia_wins", "scout_enlisted", "scout_hp", "depth_goal"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
 		if not data.character.has(key) or typeof(data.character[key]) != typeof(hero[key]): return null
 	if not data.character.quests.has("familia_patrol"): data.character.quests["familia_patrol"] = "available"
+	if not data.character.quests.has("depth_five"): data.character.quests["depth_five"] = "available"
+	if data.character.depth_goal < 0 or data.character.depth_goal > 5: return null
+	if data.character.quests.depth_five == "available" and data.character.depth_goal != 0: return null
+	if data.character.quests.depth_five != "available" and data.character.quests.get("captain") != "claimed": return null
+	if data.character.quests.depth_five == "claimed" and data.character.depth_goal != 5: return null
 	if data.character.familia_wins < 0 or data.character.familia_wins > 5: return null
 	if data.character.quests.familia_patrol == "available" and data.character.familia_wins != 0: return null
 	if data.character.quests.familia_patrol != "available" and data.character.familia_id != "dawn": return null
@@ -537,6 +548,14 @@ func quest_service(id: String, action: String, guild_level: int = 0) -> bool:
 	Log.context["run_id"] = run_id
 	Log.event("quest", action, {"id": id, "guild_level": guild_level, "success": success, "reason": reason, "before": before, "after": log_state()}, "INFO" if success else "WARN")
 	return success
+
+func objective_text() -> String:
+	if character.quests.depth_five == "claimed": return "阶段目标：第五层勘察已交付 · 继续培养队伍与自由探索"
+	if character.quests.depth_five == "active":
+		return "阶段目标：第五层勘察已达成 · 返回城市委托领奖" if character.depth_goal == 5 else "阶段目标：第五层勘察 · 接取后最深 %d / 5 层" % character.depth_goal
+	if character.quests.captain == "claimed": return "阶段目标：城市委托可接取第五层勘察"
+	if character.captain_defeated: return "阶段目标：队长已击败 · 返回城市交付队长委托"
+	return "阶段目标：打造铁剑，挑战第 3 层守关队长并回城"
 
 func job_service(id: String) -> bool:
 	var before := log_state()

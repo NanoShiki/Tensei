@@ -61,8 +61,24 @@ func _run() -> void:
 	current_scene.show_floor_map()
 	current_scene.city_buttons.quests.pressed.emit()
 	check(not quest_board().buttons.familia_patrol.disabled, "等级2城市成员任务解锁")
+	var retained := {}
+	for suffix in [".0.save", ".1.save"]:
+		var path: String = flow.progress.base_path + suffix
+		if FileAccess.file_exists(path):
+			retained[path] = FileAccess.get_file_as_bytes(path)
+			DirAccess.remove_absolute(path)
+	before = flow.run.character.duplicate(true)
+	quest_board().buttons.familia_patrol.pressed.emit()
+	check(flow.run.character == before and quest_board().buttons.familia_patrol.disabled, "窗口原资格过期后按当前共享档案拒绝，保留个人状态")
+	for path in retained:
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		file.store_buffer(retained[path])
+		file.close()
+	quest_board()._refresh()
+	check(not quest_board().buttons.familia_patrol.disabled, "恢复共享文件后同一窗口刷新开放资格")
 	quest_board().buttons.familia_patrol.pressed.emit()
 	check(flow.run.character.quests.familia_patrol == "active", "点击接取成员巡守")
+	check(load("res://Scripts/Character/quest_library.gd").reason(flow.run.character, "familia_patrol", "accept", 0) == "委托已接取或交付。", "已有任务优先显示实际状态")
 	var capture := OS.get_environment("TENSEI_PATROL_CAPTURE")
 	if not capture.is_empty():
 		root.size = Vector2i(960, 540)

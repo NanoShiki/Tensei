@@ -8,6 +8,29 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_depth_goal_requires_actual_floor_and_city_claim(self):
+        hero = {"quests": {"depth_five": "active"}, "depth_goal": 5}
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "objective",
+            "event": "depth_progress", "data": {"before": 4, "after": 5, "floor": 5, "state": {"floor": 5, "hero": hero}}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            row["data"]["floor"] = 4
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertTrue(inspect([path])[1])
+            before = {"phase": "city", "steps": 0, "respawn": {}, "hero": {
+                "quests": {"depth_five": "active"}, "depth_goal": 4, "gold": 0, "experience": 70, "level": 4,
+                "hp": 40, "max_hp": 48, "scrap": 0}}
+            after = json.loads(json.dumps(before))
+            after["hero"].update(quests={"depth_five": "claimed"}, gold=15, experience=85, level=5, max_hp=52)
+            row.update(category="quest", event="claim", data={"id": "depth_five", "success": True, "before": before, "after": after})
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("depth quest incomplete", inspect([path])[1][0])
+            before["hero"]["depth_goal"] = after["hero"]["depth_goal"] = 5
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+
     def test_growth_only_rewards_actual_members(self):
         before = {"player_id": "test", "familias": {"dawn": {"contribution": 0, "squire_xp": 0, "scout_xp": 0, "events": {}}}}
         after = {"player_id": "test", "familias": {"dawn": {"contribution": 1, "squire_xp": 0, "scout_xp": 2, "events": {"clear": ["scout"]}}}}
