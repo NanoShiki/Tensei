@@ -38,6 +38,21 @@ class LogCheckerTests(unittest.TestCase):
             path.write_text(json.dumps(row), encoding="utf-8")
             self.assertIn("avoidance awarded loot", inspect([path])[1][0])
 
+    def test_quest_rewards_cannot_repeat(self):
+        before = {"steps": 0, "respawn": {}, "phase": "city", "hero": {"gold": 0, "scrap": 3,
+            "hp": 30, "max_hp": 36, "level": 1, "experience": 0, "quests": {"hunt": "active"}}}
+        after = json.loads(json.dumps(before))
+        after["hero"].update(gold=6, experience=10, level=2, max_hp=40, quests={"hunt": "claimed"})
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "quest",
+               "event": "claim", "data": {"id": "hunt", "success": True, "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            before["hero"]["quests"]["hunt"] = "claimed"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("duplicate quest reward", inspect([path])[1][0])
+
     def test_detects_movement_violation_and_error(self):
         before = {"steps": 0, "respawn": {}}
         after = {"steps": 1, "hero": {"hp": 20, "max_hp": 36, "gold": 0,

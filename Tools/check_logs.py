@@ -52,6 +52,31 @@ def inspect(paths):
                     assert data["enemy"]["enemy_active"] and data["enemy"]["visited"] and data["state"]["pending"] == "", "avoidance removed encounter"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
+            if row["category"] == "quest":
+                try:
+                    before, after = data["before"], data["after"]
+                    old, hero = before["hero"], after["hero"]
+                    quest = data["id"]
+                    if not data["success"]:
+                        assert before == after, "rejected quest changed state"
+                    else:
+                        assert after["steps"] == before["steps"] and after["respawn"] == before["respawn"], "quest advanced exploration clock"
+                        assert before["phase"] == "city", "quest outside city"
+                        if row["event"] == "accept":
+                            expected = json.loads(json.dumps(before))
+                            assert old["quests"][quest] == "available", "quest already accepted"
+                            expected["hero"]["quests"][quest] = "active"
+                            expected["message"] = after.get("message")
+                            assert expected == after, "accept changed resources"
+                        elif row["event"] == "claim":
+                            gold, xp = {"hunt": (6, 10), "materials": (8, 15), "captain": (12, 25)}[quest]
+                            assert old["quests"][quest] == "active" and hero["quests"][quest] == "claimed", "duplicate quest reward"
+                            assert hero["gold"] == old["gold"] + gold and hero["experience"] == old["experience"] + xp, "quest reward"
+                            assert hero["scrap"] == old["scrap"] - (3 if quest == "materials" else 0), "quest material cost"
+                            assert hero["level"] == 1 + sum(hero["experience"] >= x for x in (10, 25, 50, 85)), "growth level"
+                            assert hero["max_hp"] == 36 + 4 * (hero["level"] - 1) and hero["hp"] == old["hp"], "growth health"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "battle" and "after" in data:
                 try:
                     state = data["after"]
