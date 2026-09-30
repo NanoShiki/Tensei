@@ -462,5 +462,6 @@ func quest_service(id: String, action: String) -> bool:
 	var success: bool = reason.is_empty() and Quests.apply(character, id, action)
 	if success:
 		message = "已接取：%s。" % Quests.DEFINITIONS[id].name if action == "accept" else "委托已交付：金币 +%d，经验 +%d；等级 %d。" % [Quests.DEFINITIONS[id].gold, Quests.DEFINITIONS[id].xp, character.level]
+	Log.context["run_id"] = run_id
 	Log.event("quest", action, {"id": id, "success": success, "reason": reason, "before": before, "after": log_state()}, "INFO" if success else "WARN")
 	return success

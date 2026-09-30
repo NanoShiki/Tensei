@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Run = preload("res://Scripts/Exploration/floor_run.gd")
+const Log = preload("res://Scripts/Core/game_log.gd")
 const Store = preload("res://Scripts/Core/expedition_save.gd")
 var failures := 0
 
@@ -77,7 +78,9 @@ func _run() -> void:
 	var insufficient := Run.new()
 	insufficient.setup(123)
 	insufficient.phase = "city"
+	Log.context["run_id"] = "stale-run"
 	insufficient.quest_service("materials", "accept")
+	check(Log.context.run_id == insufficient.run_id, "委托事件归属当前远征")
 	snapshot = insufficient.save_data()
 	check(not insufficient.quest_service("materials", "claim") and insufficient.save_data() == snapshot, "缺材料不部分扣款和发奖")
 	var store := Store.new()
