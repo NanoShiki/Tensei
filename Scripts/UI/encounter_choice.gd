@@ -1,16 +1,24 @@
 extends Window
 
 signal decided(avoid: bool)
+const Log = preload("res://Scripts/Core/game_log.gd")
+var run: RefCounted
+var node_id := ""
+var finished := false
 var fight_button: Button
 var avoid_button: Button
 var cancel_button: Button
 
-func open(preview: Dictionary) -> void:
+func open(preview: Dictionary, expedition: RefCounted) -> void:
+	run = expedition
+	node_id = preview.id
+	Log.context["run_id"] = run.run_id
+	Log.event("encounter", "preview", {"preview": preview, "state": run.log_state()})
 	title = "前方遭遇"
 	transient = true
 	exclusive = true
 	unresizable = true
-	close_requested.connect(queue_free)
+	close_requested.connect(_cancel)
 	var margin := MarginContainer.new()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	for side in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 18)
@@ -28,7 +36,7 @@ func open(preview: Dictionary) -> void:
 	avoid_button = _button(box, "消耗灼烧药水 ×1 · 掩护绕行", func(): _decide(true))
 	avoid_button.disabled = not preview.can_avoid
 	avoid_button.tooltip_text = "灼烧药水不足，可交战或取消。" if avoid_button.disabled else "怪物保留；再次经过还会遭遇。"
-	cancel_button = _button(box, "取消", queue_free)
+	cancel_button = _button(box, "取消", _cancel)
 	popup_centered(Vector2i(640, 390))
 	cancel_button.grab_focus()
 
@@ -40,7 +48,16 @@ func _button(box: VBoxContainer, text: String, callback: Callable) -> Button:
 	box.add_child(button)
 	return button
 
+func _cancel() -> void:
+	if finished: return
+	finished = true
+	Log.event("encounter", "cancel", {"node": node_id, "state": run.log_state()})
+	queue_free()
+
 func _decide(avoid: bool) -> void:
+	if finished or (avoid and avoid_button.disabled): return
+	finished = true
+	Log.event("encounter", "choose", {"node": node_id, "avoid": avoid, "state": run.log_state()})
 	# 关闭窗口后由父场景延迟移动，保留本次输入的视口生命周期。
 	fight_button.disabled = true
 	avoid_button.disabled = true
@@ -51,4 +68,4 @@ func _decide(avoid: bool) -> void:
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		set_input_as_handled()
-		queue_free()
+		_cancel()

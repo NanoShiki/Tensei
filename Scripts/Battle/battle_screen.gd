@@ -524,7 +524,7 @@ func _choose_node(id: String, return_key: String) -> void:
 	add_child(choice)
 	choice.decided.connect(func(avoid: bool):
 		_move_choice.call_deferred(id, return_key, avoid))
-	choice.open(preview)
+	choice.open(preview, flow.run)
 
 func _move_choice(id: String, return_key: String, avoid: bool) -> void:
 	if return_key.is_empty(): _enter_node(id, avoid)
