@@ -100,8 +100,16 @@ func _advance_step() -> void:
 				item.respawn_in -= 1
 				if item.respawn_in == 0: item.enemy_active = true
 
-func _arrive(item: Dictionary) -> String:
+func _arrive(item: Dictionary, avoid: bool = false) -> String:
 	item.visited = true
+	if item.kind == "battle" and item.enemy_active and avoid:
+		character.fire_potions -= 1
+		item.done = true
+		current = item.id
+		_record_position(item.key)
+		message = "消耗 1 瓶灼烧药水掩护绕行。怪物仍在场，没有战利品。"
+		Log.event("encounter", "avoided", {"node": item.key, "enemy": item.duplicate(true), "state": log_state()})
+		return "avoided"
 	if item.kind == "battle" and item.enemy_active:
 		pending = item.id
 		return "battle"
@@ -122,18 +130,19 @@ func _record_position(key: String) -> void:
 	if phase == "returning": return_route.append(key)
 	else: route.append(key)
 
-func enter(id: String) -> String:
+func enter(id: String, avoid: bool = false) -> String:
 	var before := log_state()
-	var result := _enter(id)
+	var result := _enter(id, avoid)
 	Log.context["run_id"] = run_id
-	Log.event("exploration", "enter", {"input": {"id": id}, "success": not result.is_empty(), "before": before, "after": log_state()}, "INFO" if not result.is_empty() else "WARN")
+	Log.event("exploration", "enter", {"input": {"id": id, "avoid": avoid}, "success": not result.is_empty(), "before": before, "after": log_state()}, "INFO" if not result.is_empty() else "WARN")
 	return result
 
-func _enter(id: String) -> String:
+func _enter(id: String, avoid: bool = false) -> String:
 	if not can_enter(id): return ""
+	if avoid and (encounter_preview(id).is_empty() or character.fire_potions < 1): return ""
 	_advance_step()
 	var item := node(id)
-	var result := _arrive(item)
+	var result := _arrive(item, avoid)
 	if item.kind == "exit":
 		if floor_number == total_floors:
 			completed = true
@@ -261,18 +270,19 @@ func return_target() -> Dictionary:
 	var choices := return_targets()
 	return choices[0] if choices.size() == 1 else {}
 
-func step_return(expected_key: String) -> bool:
+func step_return(expected_key: String, avoid: bool = false) -> bool:
 	var before := log_state()
-	var result := _step_return(expected_key)
+	var result := _step_return(expected_key, avoid)
 	Log.context["run_id"] = run_id
-	Log.event("exploration", "step_return", {"input": {"expected_key": expected_key}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	Log.event("exploration", "step_return", {"input": {"expected_key": expected_key, "avoid": avoid}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
 	return result
 
-func _step_return(expected_key: String) -> bool:
+func _step_return(expected_key: String, avoid: bool = false) -> bool:
 	var target: Dictionary = {}
 	for choice in return_targets():
 		if choice.key == expected_key: target = choice
 	if target.is_empty(): return false
+	if avoid and (target.floor != floor_number or encounter_preview(target.id).is_empty() or character.fire_potions < 1): return false
 	_advance_step()
 	if target.id == "city":
 		phase = "returned"
@@ -282,7 +292,7 @@ func _step_return(expected_key: String) -> bool:
 	floor_number = target.floor
 	nodes = _floors[floor_number]
 	message = "返程中：选择向上的连线，注意怪物剩余刷新步数。"
-	_arrive(node(target.id))
+	_arrive(node(target.id), avoid)
 	return true
 
 func return_summary() -> Dictionary:
@@ -320,6 +330,11 @@ func _city_service(action: String) -> bool:
 			character.gold -= 3
 			character.potions += 1
 			message = "花费 3 金币，购入 1 瓶治疗药水。"
+		"fire_potion":
+			if character.gold < 4: return false
+			character.gold -= 4
+			character.fire_potions += 1
+			message = "花费 4 金币，购入 1 瓶灼烧药水，可战斗或掩护绕行。"
 		"forge":
 			if character.gold < 6 or character.scrap < 3 or character.weapon == "iron_sword": return false
 			character.gold -= 6
@@ -448,3 +463,13 @@ func use_field_potion() -> bool:
 	Log.context["run_id"] = run_id
 	Log.event("inventory", "field_potion", {"success": reason.is_empty(), "reason": reason, "amount": amount, "before": before, "after": log_state()}, "INFO" if reason.is_empty() else "WARN")
 	return reason.is_empty()
+
+func encounter_preview(id: String) -> Dictionary:
+	var legal := can_enter(id)
+	if phase == "returning":
+		for choice in return_targets():
+			if choice.floor == floor_number and choice.id == id: legal = true
+	if not legal: return {}
+	var item := node(id)
+	if item.kind != "battle" or (not item.enemy_active and item.respawn_in != 1): return {}
+	return {"id": id, "name": "守关队长" if is_captain_node(id) else "哥布林", "stock": character.fire_potions, "cost": 1, "can_avoid": character.fire_potions >= 1}

@@ -378,7 +378,7 @@ func show_floor_map() -> void:
 		elif item.kind == "cache" and item.reward_claimed: status = "补给 · 已领取"
 		var title: String = (position_text + " · " if not position_text.is_empty() else "") + visit_text + "\n" + status
 		if not revealed: title = "未到访\n未知"
-		var callback: Callable = _return_step.bind(str(item.key)) if returning else _enter_node.bind(str(item.id))
+		var callback: Callable = _choose_node.bind(str(item.id), str(item.key) if returning else "")
 		var button := _button(title, Rect2(_node_position(item), Vector2(148, 68)), callback, enabled)
 		button.disabled = not enabled
 		if not revealed:
@@ -419,8 +419,8 @@ func _begin_descent() -> void:
 func _descend_floor(level: int) -> void:
 	if flow.run.descend_floor(level): show_floor_map()
 
-func _return_step(key: String) -> void:
-	if flow.run.step_return(key):
+func _return_step(key: String, avoid: bool = false) -> void:
+	if flow.run.step_return(key, avoid):
 		if not flow.run.pending.is_empty(): start_encounter()
 		else: show_floor_map()
 
@@ -451,11 +451,13 @@ func _show_city() -> void:
 	_panel(Rect2(468, 112, 780, 402))
 	_label("阶段目标：已击败守关队长 · 可继续探索" if hero.captain_defeated else "阶段目标：打造铁剑，挑战第 3 层守关队长并回城", Rect2(42, 72, 1190, 32), 19, GOLD)
 	_label("休整与工坊", Rect2(496, 137, 700, 40), 24, GOLD)
-	city_buttons["rest"] = _button("旅店休整 · 免费恢复全部生命", Rect2(496, 205, 720, 54), _city_service.bind("rest"))
+	city_buttons["rest"] = _button("旅店休整 · 免费恢复全部生命", Rect2(496, 192, 720, 46), _city_service.bind("rest"))
 	city_buttons["rest"].disabled = hero.hp >= hero.max_hp
-	city_buttons["potion"] = _button("购买治疗药水 ×1 · 3 金币", Rect2(496, 277, 720, 54), _city_service.bind("potion"))
+	city_buttons["potion"] = _button("购买治疗药水 ×1 · 3 金币", Rect2(496, 250, 720, 46), _city_service.bind("potion"))
 	city_buttons["potion"].disabled = hero.gold < 3
-	city_buttons["forge"] = _button("铁剑已装备" if hero.weapon == "iron_sword" else "打造并装备铁剑 · 6 金币 + 3 铁片", Rect2(496, 349, 720, 54), _city_service.bind("forge"), true)
+	city_buttons["fire_potion"] = _button("购买灼烧药水 ×1 · 4 金币（战斗／绕行）", Rect2(496, 308, 720, 46), _city_service.bind("fire_potion"))
+	city_buttons["fire_potion"].disabled = hero.gold < 4
+	city_buttons["forge"] = _button("铁剑已装备" if hero.weapon == "iron_sword" else "打造并装备铁剑 · 6 金币 + 3 铁片", Rect2(496, 366, 720, 46), _city_service.bind("forge"), true)
 	city_buttons["forge"].disabled = hero.weapon == "iron_sword" or hero.gold < 6 or hero.scrap < 3
 	_label("铁剑：剑击与强攻伤害 +2。战斗胜利获得 3 金币、1 铁片。", Rect2(496, 433, 716, 58), 17, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label(flow.run.message, Rect2(42, 541, 1180, 60), 20).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -470,8 +472,8 @@ func _depart_city() -> void:
 func _node_position(item: Dictionary) -> Vector2:
 	return Vector2(58 + int(item.step) * 244, 210 + int(item.lane) * 110)
 
-func _enter_node(id: String) -> void:
-	var result: String = flow.run.enter(id)
+func _enter_node(id: String, avoid: bool = false) -> void:
+	var result: String = flow.run.enter(id, avoid)
 	if result == "battle": start_encounter()
 	else: show_floor_map()
 
@@ -508,3 +510,21 @@ func _input(event: InputEvent) -> void:
 			_end_turn()
 		elif event.keycode >= KEY_1 and event.keycode <= KEY_6:
 			_select(["strike", "power", "guard", "surge", "potion", "fire_potion"][event.keycode - KEY_1])
+
+func _choose_node(id: String, return_key: String) -> void:
+	if not map_visible: return
+	for child in get_children():
+		if child is Window and child.visible: return
+	var preview: Dictionary = flow.run.encounter_preview(id)
+	if preview.is_empty():
+		_move_choice(id, return_key, false)
+		return
+	var choice := preload("res://Scripts/UI/encounter_choice.gd").new()
+	add_child(choice)
+	choice.decided.connect(func(avoid: bool):
+		_move_choice.call_deferred(id, return_key, avoid))
+	choice.open(preview)
+
+func _move_choice(id: String, return_key: String, avoid: bool) -> void:
+	if return_key.is_empty(): _enter_node(id, avoid)
+	else: _return_step(return_key, avoid)
