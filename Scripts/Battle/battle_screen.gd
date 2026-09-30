@@ -24,6 +24,7 @@ var expedition_button: Button
 var direction_button: Button
 var city_buttons: Dictionary = {}
 var inventory: Window
+var party_practice := false
 
 func _ready() -> void:
 	add_to_group("gm_battle_context")
@@ -128,7 +129,7 @@ func start_encounter() -> void:
 		if flow.run != null:
 			character = flow.run.character
 			floor_number = flow.run.floor_number
-	battle.setup(character, floor_number, -1, flow != null and flow.run != null and flow.run.is_captain_node(flow.run.pending))
+	battle.setup(character, floor_number, -1, flow != null and flow.run != null and flow.run.is_captain_node(flow.run.pending), BattleState.practice_companion() if party_practice else {})
 	_refresh()
 	_drive_enemy()
 
@@ -141,12 +142,18 @@ func _refresh() -> void:
 	_label("第 %d 轮" % battle.round_number, Rect2(470, 12, 80, 24), 16, GOLD)
 	for i in range(battle.order.size()):
 		var id: String = battle.order[i]
-		var name_text := "洛恩" if id == "lorn" else str(battle.enemy.name)
+		var name_text: String = battle.unit(id).name
 		var active: bool = battle.current_id() == id
 		_panel(Rect2(565 + i * 152, 16, 138, 53), Color("29372e") if active else Color("19262b"), GOLD if active else Color("3c4948"))
 		_label(("▶  " if active else "    ") + name_text, Rect2(577 + i * 152, 28, 120, 30), 18, GOLD if active else MUTED)
 	_button("返回主菜单", Rect2(1090, 22, 158, 40), _return_to_menu)
-	_unit("lorn", battle.hero, Rect2(202, 145, 294, 340), "res://Assets/Battle/lorn.png")
+	if flow == null or flow.run == null:
+		_button("单人演练" if party_practice else "双人演练", Rect2(28, 88, 158, 36), _toggle_practice)
+	if not battle.ally.is_empty():
+		_unit("lorn", battle.hero, Rect2(85, 197, 210, 284), "res://Assets/Battle/lorn.png")
+		_unit("squire", battle.ally, Rect2(330, 212, 185, 267), "res://Assets/Battle/lorn.png")
+	else:
+		_unit("lorn", battle.hero, Rect2(202, 145, 294, 340), "res://Assets/Battle/lorn.png")
 	_unit("goblin", battle.enemy, Rect2(833, 205, 222, 302), "res://Assets/Battle/goblin.png")
 	if battle.enemy.captain:
 		_label(battle.enemy_intent(), Rect2(500, 90, 730, 36), 18, GOLD)
@@ -154,14 +161,15 @@ func _refresh() -> void:
 	if busy or battle.current_id() == "goblin": message = str(battle.enemy.name) + "正在行动…"
 	elif not selected.is_empty():
 		var entry: Dictionary = Abilities.ENTRIES[selected]
-		message = "%s → 点击%s确认   ·   右键 / Esc 取消" % [entry.name, str(battle.enemy.name) if entry.target == "enemy" else "洛恩"]
+		message = "%s → 点击%s确认   ·   右键 / Esc 取消" % [entry.name, str(battle.enemy.name) if entry.target == "enemy" else ("存活受伤队友" if selected == "potion" else str(battle.current_unit().name))]
 		if entry.target == "enemy" and not entry.has("stock"): message += "   ·   命中 %d%%" % battle.hit_chance(selected)
 	elif battle.action == 0: message = "本回合已行动。点击「结束回合」继续。"
 	hint_label = _label(message, Rect2(30, 480, 1220, 32), 17, GOLD)
 	_panel(Rect2(20, 529, 257, 170))
-	_label("装备 / 洛恩", Rect2(36, 541, 230, 26), 17, GOLD)
-	_label("%s · 布衣\n护甲 AC %d · 命中 +%d\n剑技伤害加成 +%d" % [CharacterLibrary.weapon_name(battle.hero), battle.hero.ac, battle.hero.attack, CharacterLibrary.weapon_bonus(battle.hero)], Rect2(36, 577, 226, 70), 16)
-	_label("生命 %d / %d" % [battle.hero.hp, battle.hero.max_hp], Rect2(36, 652, 225, 26), 18, Color("9fc0a0"))
+	var actor: Dictionary = battle.current_unit() if battle.is_player_turn() else battle.hero
+	_label("装备 / " + str(actor.name), Rect2(36, 541, 230, 26), 17, GOLD)
+	_label("%s · 布衣\n护甲 AC %d · 命中 +%d\n剑技伤害加成 +%d" % [CharacterLibrary.weapon_name(actor), actor.ac, actor.attack, CharacterLibrary.weapon_bonus(actor)], Rect2(36, 577, 226, 70), 16)
+	_label("生命 %d / %d" % [actor.hp, actor.max_hp], Rect2(36, 652, 225, 26), 18, Color("9fc0a0"))
 	_panel(Rect2(291, 529, 448, 170))
 	_label("技能", Rect2(307, 541, 60, 24), 17, GOLD)
 	_label("剩余行动  %d   ·   每回合 1 次" % battle.action, Rect2(388, 541, 355, 24), 16, MUTED)
@@ -173,10 +181,10 @@ func _refresh() -> void:
 	_ability_button("fire_potion", Rect2(870, 578, 98, 96))
 	_panel(Rect2(994, 529, 266, 170))
 	end_button = _button("结束回合  →", Rect2(1008, 555, 237, 67), _end_turn, true)
-	end_button.disabled = busy or battle.current_id() != "lorn"
+	end_button.disabled = busy or not battle.is_player_turn()
 	_label("Space 结束   ·   1–6 选择", Rect2(1008, 642, 237, 26), 15, MUTED)
 	var log_text: String = "\n".join(battle.logs.slice(maxi(0, battle.logs.size() - 3)))
-	log_label = _label(log_text, Rect2(464, 324, 355, 132), 13, MUTED)
+	log_label = _label(log_text, Rect2(550, 324, 265, 132) if not battle.ally.is_empty() else Rect2(464, 324, 355, 132), 13, MUTED)
 	log_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	result_panel = _panel(Rect2(430, 188, 420, 255), Color("142125"), GOLD)
 	result_panel.visible = battle.outcome != "ongoing"
@@ -197,11 +205,12 @@ func _unit(id: String, data: Dictionary, rect: Rect2, path: String) -> void:
 	texture.size = rect.size
 	texture.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	texture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if id == "squire": texture.modulate = Color("94c9da")
 	if data.hp <= 0: texture.modulate = Color(0.5, 0.5, 0.5, 0.45)
 	canvas.add_child(texture)
 	var targetable := false
 	if not selected.is_empty():
-		targetable = id == ("goblin" if Abilities.ENTRIES[selected].target == "enemy" else "lorn")
+		targetable = battle.can_target(selected, id)
 	var button := Button.new()
 	button.position = rect.position
 	button.size = rect.size
@@ -213,17 +222,18 @@ func _unit(id: String, data: Dictionary, rect: Rect2, path: String) -> void:
 	targets[id] = button
 	if targetable:
 		_label("▼  选择目标", Rect2(rect.position.x + 35, 91, 210, 30), 18, GOLD)
-	_label("%s   %d / %d   AC %d" % [data.name, data.hp, data.max_hp, data.ac], Rect2(rect.position.x, 121, 290, 28), 17, GOLD if targetable else PAPER)
+	var compact: bool = not battle.ally.is_empty() and id != "goblin"
+	_label(("%s\n%d / %d · AC %d" if compact else "%s   %d / %d   AC %d") % [data.name, data.hp, data.max_hp, data.ac], Rect2(rect.position.x, 134 if compact else 121, rect.size.x if compact else 290, 50 if compact else 28), 16 if compact else 17, GOLD if targetable else PAPER)
 	var bar := ProgressBar.new()
 	bar.show_percentage = false
-	bar.position = Vector2(rect.position.x, 151)
-	bar.custom_minimum_size = Vector2(216, 7)
+	bar.position = Vector2(rect.position.x, 188 if compact else 151)
+	bar.custom_minimum_size = Vector2(minf(216, rect.size.x), 7)
 	for state in ["background", "fill"]:
 		var style := StyleBoxFlat.new()
-		style.bg_color = (Color("8fad82") if id == "lorn" else Color("ba7769")) if state == "fill" else Color("303e3e")
+		style.bg_color = (Color("8fad82") if id != "goblin" else Color("ba7769")) if state == "fill" else Color("303e3e")
 		style.set_corner_radius_all(3)
 		bar.add_theme_stylebox_override(state, style)
-	bar.size = Vector2(216, 7)
+	bar.size = Vector2(minf(216, rect.size.x), 7)
 	bar.max_value = data.max_hp
 	bar.value = data.hp
 	bar.show_percentage = false
@@ -237,7 +247,8 @@ func _ability_button(id: String, rect: Rect2) -> void:
 	button.disabled = busy or not reason.is_empty()
 	button.tooltip_text = entry.hint + ("\n" + reason if not reason.is_empty() else "")
 	if entry.has("die"):
-		button.tooltip_text = "1 行动 · 命中 +%d · 1d%d+%d 伤害" % [int(battle.hero.attack) - int(entry.get("penalty", 0)), entry.die, int(entry.bonus) + CharacterLibrary.weapon_bonus(battle.hero)] + ("\n" + reason if not reason.is_empty() else "")
+		var actor: Dictionary = battle.current_unit() if battle.is_player_turn() else battle.hero
+		button.tooltip_text = "1 行动 · 命中 +%d · 1d%d+%d 伤害" % [int(actor.attack) - int(entry.get("penalty", 0)), entry.die, int(entry.bonus) + CharacterLibrary.weapon_bonus(actor)] + ("\n" + reason if not reason.is_empty() else "")
 	var icon := TextureRect.new()
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.texture = load("res://Assets/Battle/%s.svg" % id)
@@ -267,7 +278,7 @@ func _target(id: String) -> void:
 func _feedback() -> void:
 	var event: Dictionary = battle.last_event
 	if event.is_empty(): return
-	var x := 860 if event.target == "goblin" else 240
+	var x := 860 if event.target == "goblin" else (340 if event.target == "squire" else (95 if not battle.ally.is_empty() else 240))
 	var label := _label(str(event.text), Rect2(x, 220, 280, 55), 29, GOLD)
 	var tween := create_tween()
 	tween.tween_property(label, "position:y", 185.0, 0.4)
@@ -538,3 +549,10 @@ func _open_quests() -> void:
 	add_child(board)
 	board.changed.connect(show_floor_map)
 	board.open(flow.run)
+
+func _toggle_practice() -> void:
+	if busy or (flow != null and flow.run != null): return
+	preload("res://Scripts/Core/game_log.gd").event("battle", "practice_switch", {"party": not party_practice, "previous": battle.log_state()})
+	party_practice = not party_practice
+	if flow != null: flow.active_character = CharacterLibrary.resolve()
+	start_encounter()
