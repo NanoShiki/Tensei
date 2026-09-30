@@ -1,6 +1,7 @@
 extends RefCounted
 
 const Log = preload("res://Scripts/Core/game_log.gd")
+const Quests = preload("res://Scripts/Character/quest_library.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 var floor_number := 1
 var total_floors := 30
@@ -191,6 +192,7 @@ func _finish_battle(hero: Dictionary, victory: bool) -> bool:
 		item.enemy_active = false
 		item.clear_count += 1
 		battles_won += 1
+		if character.quests.hunt == "active": character.hunt_wins = mini(3, character.hunt_wins + 1)
 		character.gold += 3
 		character.scrap += 1
 		var random := RandomNumberGenerator.new()
@@ -367,7 +369,7 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
 	data = data.duplicate(true)
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
-	for key in ["gold", "scrap", "weapon", "captain_defeated"]:
+	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
@@ -375,6 +377,11 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.character.id != "lorn" or data.character.max_hp <= 0 or data.character.hp <= 0 or data.character.hp > data.character.max_hp: return null
 	if data.character.potions < 0 or data.character.fire_potions < 0: return null
 	if data.character.gold < 0 or data.character.scrap < 0 or data.character.weapon not in ["training_sword", "iron_sword"]: return null
+	if data.character.experience < 0 or data.character.experience > 1000000 or data.character.level != CharacterLibrary.level_for(data.character.experience): return null
+	if data.character.max_hp != 36 + 4 * (data.character.level - 1): return null
+	if data.character.hunt_wins < 0 or data.character.hunt_wins > 3 or data.character.quests.size() != Quests.DEFINITIONS.size(): return null
+	for id in Quests.DEFINITIONS:
+		if data.character.quests.get(id) not in ["available", "active", "claimed"]: return null
 	if data.phase == "city" and (data.current != "entry" or data.floor_number != 1): return null
 	if data.floors.size() != data.deepest_floor: return null
 	var restored = load("res://Scripts/Exploration/floor_run.gd").new()
@@ -448,3 +455,12 @@ func use_field_potion() -> bool:
 	Log.context["run_id"] = run_id
 	Log.event("inventory", "field_potion", {"success": reason.is_empty(), "reason": reason, "amount": amount, "before": before, "after": log_state()}, "INFO" if reason.is_empty() else "WARN")
 	return reason.is_empty()
+
+func quest_service(id: String, action: String) -> bool:
+	var before := log_state()
+	var reason := "仅可在城市整备接取和交付。" if phase != "city" or not pending.is_empty() or character.hp <= 0 else Quests.reason(character, id, action)
+	var success: bool = reason.is_empty() and Quests.apply(character, id, action)
+	if success:
+		message = "已接取：%s。" % Quests.DEFINITIONS[id].name if action == "accept" else "委托已交付：金币 +%d，经验 +%d；等级 %d。" % [Quests.DEFINITIONS[id].gold, Quests.DEFINITIONS[id].xp, character.level]
+	Log.event("quest", action, {"id": id, "success": success, "reason": reason, "before": before, "after": log_state()}, "INFO" if success else "WARN")
+	return success
