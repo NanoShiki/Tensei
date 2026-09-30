@@ -86,6 +86,21 @@ def inspect(paths):
                         assert 0 <= state["ally"]["hp"] <= state["ally"]["max_hp"], "ally health bounds"
                     if not data["success"]:
                         assert data["before"] == state, "rejected action changed state"
+                    elif row["event"] == "use_ability":
+                        old = data["before"]
+                        assert old["actor"] in ("lorn", "squire") and old["actions"] > 0 and state["actions"] == old["actions"] - 1, "ability action cost"
+                        ability, target = data["input"]["ability"], data["input"]["target"]
+                        if ability in ("potion", "fire_potion"):
+                            stock = "potions" if ability == "potion" else "fire_potions"
+                            assert state["hero"][stock] == old["hero"][stock] - 1, "battle potion stock"
+                            receiver = {"lorn": "hero", "squire": "ally", "goblin": "enemy"}[target]
+                            expected_hp = min(old[receiver]["hp"] + 12, old[receiver]["max_hp"]) if ability == "potion" else max(0, old[receiver]["hp"] - 8)
+                            assert state[receiver]["hp"] == expected_hp, "battle potion effect"
+                        if ability == "surge":
+                            actor = "hero" if old["actor"] == "lorn" else "ally"
+                            assert state[actor]["surge"] == old[actor]["surge"] - 1 and state[actor]["hp"] == min(old[actor]["hp"] + 8, old[actor]["max_hp"]), "member surge"
+                        if ability == "guard":
+                            assert state["guarding" if old["actor"] == "lorn" else "ally_guarding"], "member guard"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
             if row["category"] != "exploration" or not data.get("success"):
