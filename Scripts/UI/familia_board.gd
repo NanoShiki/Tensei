@@ -68,12 +68,19 @@ func _refresh() -> void:
 		var available: bool = flow.progress.refresh() and flow.progress.data.get("player_id") == hero.player_id
 		if available:
 			var member: Dictionary = flow.progress.companion()
-			_text("眷族等级 %d · 贡献 %d\n见习卫士 · 等级 %d · 共享经验 %d · 生命上限 %d\n命中 +4 · 防御 13 · 练习木剑\n每次编队参战胜利：眷族贡献 +1，卫士经验 +2。" % [flow.progress.guild_level(), flow.progress.data.familias.dawn.contribution, member.level, member.experience, member.max_hp])
-			_text("当前编队：" + ("洛恩 + 见习卫士（生命 %d/%d）" % [hero.party_hp, member.max_hp] if hero.party_enlisted else "洛恩"))
+			_text("眷族等级 %d · 贡献 %d\n见习卫士 · 等级 %d · 共享经验 %d · 生命上限 %d\n命中 +4 · 防御 13 · 练习木剑\n每次编队胜利：眷族贡献 +1，各参战队友经验 +2。" % [flow.progress.guild_level(), flow.progress.data.familias.dawn.contribution, member.level, member.experience, member.max_hp])
+			var roster := "洛恩"
+			if hero.party_enlisted: roster += " + 见习卫士（生命 %d/%d）" % [hero.party_hp, member.max_hp]
+			if hero.scout_enlisted: roster += " + 见习游侠（生命 %d/%d）" % [hero.scout_hp, flow.progress.companion("scout").max_hp]
+			_text("当前编队：" + roster)
 		else: _text("共享档案不可用，请恢复同一玩家的备份。" + flow.progress.message)
 		_button("dismiss" if hero.party_enlisted else "enlist", "让卫士留在城市" if hero.party_enlisted else "招募见习卫士 · 免费", not available)
+		if available:
+			var scout: Dictionary = flow.progress.companion("scout")
+			_text("见习游侠 · 弓箭手 · 等级 %d · 经验 %d\n生命上限 %d · 命中 +5 · 防御 12 · 敏捷 +3\n等级 2 开放瞄准射击；晨行眷族等级 2 可招募。\n当前：%s" % [scout.level, scout.experience, scout.max_hp, "已编队 · 生命 %d/%d" % [hero.scout_hp, scout.max_hp] if hero.scout_enlisted else "未编队"])
+		_button("dismiss_scout" if hero.scout_enlisted else "enlist_scout", "让游侠留在城市" if hero.scout_enlisted else "招募见习游侠 · 免费 · 眷族等级 2", not available or (not hero.scout_enlisted and flow.progress.guild_level() < 2))
 		_button("retry", "同步待提交成长 · %d 条" % hero.growth_pending.size(), hero.growth_pending.is_empty() or not available)
-	feedback.text = "眷族与卫士成长自动写入共享档案；角色归属、编队和当前生命需手动保存。双人和免费招募为 Demo 规则。"
+	feedback.text = "眷族与队友成长自动写入共享档案；角色归属、编队和当前生命需手动保存。最多三人和免费招募为 Demo 规则。"
 
 func _act(action: String) -> void:
 	if flow.familia_service(action):

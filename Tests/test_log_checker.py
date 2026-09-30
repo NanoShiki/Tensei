@@ -8,6 +8,51 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_growth_only_rewards_actual_members(self):
+        before = {"player_id": "test", "familias": {"dawn": {"contribution": 0, "squire_xp": 0, "scout_xp": 0, "events": {}}}}
+        after = {"player_id": "test", "familias": {"dawn": {"contribution": 1, "squire_xp": 0, "scout_xp": 2, "events": {"clear": ["scout"]}}}}
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "familia",
+            "event": "victory_growth", "data": {"id": "clear", "members": ["scout"], "success": True, "duplicate": False, "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["familias"]["dawn"]["squire_xp"] = 2
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertTrue(inspect([path])[1])
+            row["data"]["members"] = ["squire", "scout"]
+            after["familias"]["dawn"]["events"]["clear"] = ["squire", "scout"]
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["familias"]["dawn"]["contribution"] = 2
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertTrue(inspect([path])[1])
+
+    def test_third_member_guard_and_surge_are_independent(self):
+        before = {"actor": "scout", "actions": 1, "guarding": False, "ally_guarding": False, "scout_guarding": False,
+            "hero": {"hp": 30, "max_hp": 36, "surge": 1}, "ally": {"hp": 28, "max_hp": 28, "surge": 1},
+            "scout": {"hp": 10, "max_hp": 22, "surge": 1}, "enemy": {"hp": 22, "max_hp": 22}}
+        after = json.loads(json.dumps(before))
+        after.update(actions=0, scout_guarding=True)
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "battle",
+            "event": "use_ability", "data": {"input": {"ability": "guard", "target": "scout"}, "success": True, "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["guarding"] = True
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertTrue(inspect([path])[1])
+            after = json.loads(json.dumps(before))
+            after["actions"] = 0
+            after["scout"].update(hp=18, surge=0)
+            row["data"].update(input={"ability": "surge", "target": "scout"}, after=after)
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["ally"]["surge"] = 0
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertTrue(inspect([path])[1])
+
     def test_field_potion_does_not_advance_clock(self):
         before = {"steps": 3, "respawn": {}, "hero": {"hp": 20, "max_hp": 36, "potions": 2}}
         after = {"steps": 3, "respawn": {}, "hero": {"hp": 32, "max_hp": 36, "potions": 1}}

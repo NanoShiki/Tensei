@@ -8,6 +8,9 @@ from collections import Counter, defaultdict
 import json
 from pathlib import Path
 
+UNITS = {"lorn": "hero", "squire": "ally", "scout": "scout", "goblin": "enemy"}
+GUARDS = {"lorn": "guarding", "squire": "ally_guarding", "scout": "scout_guarding"}
+
 
 def inspect(paths):
     counts = Counter()
@@ -73,9 +76,14 @@ def inspect(paths):
                         if data["duplicate"]:
                             assert old == new and data["id"] in before["events"], "duplicate shared reward"
                         else:
-                            assert data["id"] not in before["events"] and after["events"].get(data["id"]) is True, "shared event ledger"
-                            assert after["contribution"] == before["contribution"] + 1 and after["squire_xp"] == before["squire_xp"] + 2, "shared growth reward"
-                            assert after["events"] == dict(before["events"], **{data["id"]: True}), "shared ledger changed history"
+                            members = data.get("members", ["squire"])
+                            assert members and len(members) == len(set(members)) and all(member in ("squire", "scout") for member in members), "shared participants"
+                            event = members if "scout_xp" in after else True
+                            assert data["id"] not in before["events"] and after["events"].get(data["id"]) == event, "shared event ledger"
+                            assert after["contribution"] == before["contribution"] + 1, "shared growth reward"
+                            for member in ("squire", "scout"):
+                                assert after.get(member + "_xp", 0) == before.get(member + "_xp", 0) + (2 if member in members else 0), "shared growth reward"
+                            assert after["events"] == dict(before["events"], **{data["id"]: event}), "shared ledger changed history"
                     if row["event"] == "service":
                         before, after = data["before"], data["after"]
                         if not data["success"]:
@@ -87,6 +95,10 @@ def inspect(paths):
                                 assert after["hero"]["familia_id"] == "dawn" and after["hero"]["player_id"] == data["shared_after"]["player_id"], "familia owner binding"
                             if data["action"] == "enlist":
                                 assert after["hero"]["party_enlisted"] and after["hero"]["party_hp"] > 0, "party enlist"
+                            if data["action"] == "enlist_scout":
+                                assert after["hero"]["scout_enlisted"] and after["hero"]["scout_hp"] > 0 and data["shared_after"]["familias"]["dawn"]["contribution"] >= 3, "scout enlist qualification"
+                            if data["action"] == "dismiss_scout":
+                                assert not after["hero"]["scout_enlisted"] and after["hero"]["scout_hp"] == 0, "scout dismiss"
                             if data["action"] == "dismiss":
                                 assert not after["hero"]["party_enlisted"] and after["hero"]["party_hp"] == 0, "party dismiss"
                     if row["event"] == "sync":
@@ -145,35 +157,37 @@ def inspect(paths):
                     state = data["after"]
                     assert all(0 <= state[k]["hp"] <= state[k]["max_hp"] for k in ("hero", "enemy")), "battle health bounds"
                     assert state["actions"] >= 0, "negative actions"
-                    if state.get("ally"):
-                        assert 0 <= state["ally"]["hp"] <= state["ally"]["max_hp"], "ally health bounds"
+                    for member in ("ally", "scout"):
+                        if state.get(member):
+                            assert 0 <= state[member]["hp"] <= state[member]["max_hp"], "ally health bounds"
                     if not data["success"]:
                         assert data["before"] == state, "rejected action changed state"
                     elif row["event"] == "use_ability":
                         old = data["before"]
-                        assert old["actor"] in ("lorn", "squire") and old["actions"] > 0 and state["actions"] == old["actions"] - 1, "ability action cost"
+                        assert old["actor"] in ("lorn", "squire", "scout") and old["actions"] > 0 and state["actions"] == old["actions"] - 1, "ability action cost"
                         ability, target = data["input"]["ability"], data["input"]["target"]
                         if ability in ("arcane_bolt", "aimed_shot", "ambush"):
-                            actor = old["hero"] if old["actor"] == "lorn" else old["ally"]
+                            actor = old[UNITS[old["actor"]]]
                             assert actor.get("job_id") == {"arcane_bolt": "mage", "aimed_shot": "archer", "ambush": "rogue"}[ability] and actor.get("level", 1) >= 2, "job skill qualification"
                         if ability in ("potion", "fire_potion"):
                             stock = "potions" if ability == "potion" else "fire_potions"
                             assert state["hero"][stock] == old["hero"][stock] - 1, "battle potion stock"
-                            receiver = {"lorn": "hero", "squire": "ally", "goblin": "enemy"}[target]
+                            receiver = UNITS[target]
                             if ability == "potion":
                                 assert old[receiver]["hp"] > 0, "healed a downed member"
                             expected_hp = min(old[receiver]["hp"] + 12, old[receiver]["max_hp"]) if ability == "potion" else max(0, old[receiver]["hp"] - 8)
                             assert state[receiver]["hp"] == expected_hp, "battle potion effect"
                         if ability == "surge":
-                            actor = "hero" if old["actor"] == "lorn" else "ally"
+                            actor = UNITS[old["actor"]]
                             assert state[actor]["surge"] == old[actor]["surge"] - 1 and state[actor]["hp"] == min(old[actor]["hp"] + 8, old[actor]["max_hp"]), "member surge"
-                            other = "ally" if actor == "hero" else "hero"
-                            if old.get(other):
-                                assert state[other]["surge"] == old[other]["surge"] and state[other]["hp"] == old[other]["hp"], "surge changed another member"
+                            for other in ("hero", "ally", "scout"):
+                                if other != actor and old.get(other):
+                                    assert state[other]["surge"] == old[other]["surge"] and state[other]["hp"] == old[other]["hp"], "surge changed another member"
                         if ability == "guard":
-                            assert state["guarding" if old["actor"] == "lorn" else "ally_guarding"], "member guard"
-                            other = "ally_guarding" if old["actor"] == "lorn" else "guarding"
-                            assert state.get(other, False) == old.get(other, False), "guard changed another member"
+                            assert state[GUARDS[old["actor"]]], "member guard"
+                            for member, flag in GUARDS.items():
+                                if member != old["actor"]:
+                                    assert state.get(flag, False) == old.get(flag, False), "guard changed another member"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
             if row["category"] != "exploration" or not data.get("success"):
@@ -201,7 +215,7 @@ def inspect(paths):
                     assert after["wins"] == before["wins"] + 1, "victory counted once"
                     source = data["input"]["hero"]
                     assert hero["gold"] == source["gold"] + 3 and hero["scrap"] == source["scrap"] + 1, "victory reward"
-                    qualifies = data["input"].get("with_party", False) and source.get("party_enlisted") and source.get("familia_id") == "dawn" and source["quests"].get("familia_patrol") == "active"
+                    qualifies = data["input"].get("with_party", False) and (source.get("party_enlisted") or source.get("scout_enlisted")) and source.get("familia_id") == "dawn" and source["quests"].get("familia_patrol") == "active"
                     assert hero.get("familia_wins", 0) == min(5, source.get("familia_wins", 0) + bool(qualifies)), "member victory progress"
                 if action == "city_service":
                     old = before["hero"]
@@ -210,6 +224,8 @@ def inspect(paths):
                         assert hero["hp"] == hero["max_hp"] and hero["gold"] == old["gold"], "free rest"
                         if old.get("party_enlisted"):
                             assert hero["party_hp"] == data["input"]["companion_max_hp"], "party rest"
+                        if old.get("scout_enlisted"):
+                            assert hero["scout_hp"] == data["input"]["scout_max_hp"], "scout rest"
                     if service == "potion":
                         assert hero["gold"] == old["gold"] - 3 and hero["potions"] == old["potions"] + 1, "potion transaction"
                     if service == "fire_potion":

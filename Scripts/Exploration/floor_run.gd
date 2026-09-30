@@ -99,7 +99,7 @@ func node(id: String) -> Dictionary:
 	return {}
 
 func has_living_party() -> bool:
-	return character.hp > 0 or (character.get("party_enlisted", false) and character.get("party_hp", 0) > 0)
+	return character.hp > 0 or (character.get("party_enlisted", false) and character.get("party_hp", 0) > 0) or (character.get("scout_enlisted", false) and character.get("scout_hp", 0) > 0)
 
 func can_enter(id: String) -> bool:
 	return phase == "descending" and not failed and pending.is_empty() and has_living_party() and id in node(current).get("next", []) and not node(id).is_empty()
@@ -214,7 +214,7 @@ func _finish_battle(hero: Dictionary, victory: bool, with_party: bool = false) -
 		item.clear_count += 1
 		battles_won += 1
 		if character.quests.hunt == "active": character.hunt_wins = mini(3, character.hunt_wins + 1)
-		if with_party and character.party_enlisted and character.familia_id == "dawn" and character.quests.familia_patrol == "active": character.familia_wins = mini(5, character.familia_wins + 1)
+		if with_party and (character.party_enlisted or character.scout_enlisted) and character.familia_id == "dawn" and character.quests.familia_patrol == "active": character.familia_wins = mini(5, character.familia_wins + 1)
 		character.gold += 3
 		character.scrap += 1
 		var random := RandomNumberGenerator.new()
@@ -326,22 +326,23 @@ func _enter_city() -> bool:
 	message = "已回到城市。战利品随身保留，可休整、补给或打造铁剑。"
 	return true
 
-func city_service(action: String, companion_max_hp: int = 0) -> bool:
+func city_service(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0) -> bool:
 	var before := log_state()
-	var result := _city_service(action, companion_max_hp)
+	var result := _city_service(action, companion_max_hp, scout_max_hp)
 	Log.context["run_id"] = run_id
-	Log.event("exploration", "city_service", {"input": {"action": action, "companion_max_hp": companion_max_hp}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	Log.event("exploration", "city_service", {"input": {"action": action, "companion_max_hp": companion_max_hp, "scout_max_hp": scout_max_hp}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
 	return result
 
-func _city_service(action: String, companion_max_hp: int = 0) -> bool:
+func _city_service(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0) -> bool:
 	if phase != "city": return false
 	match action:
 		"rest":
-			if character.party_enlisted and not PlayerProgress.valid_hp_limit(companion_max_hp):
-				message = "卫士共享档案不可用，无法确认生命上限。请恢复同一玩家共享备份后重试。"
+			if (character.party_enlisted and not PlayerProgress.valid_hp_limit(companion_max_hp)) or (character.scout_enlisted and not PlayerProgress.valid_hp_limit(scout_max_hp, "scout")):
+				message = "队友共享档案不可用，无法确认生命上限。请恢复同一玩家共享备份后重试。"
 				return false
-			if character.hp >= character.max_hp and (not character.party_enlisted or character.party_hp >= companion_max_hp): return false
+			if character.hp >= character.max_hp and (not character.party_enlisted or character.party_hp >= companion_max_hp) and (not character.scout_enlisted or character.scout_hp >= scout_max_hp): return false
 			if character.party_enlisted: character.party_hp = companion_max_hp
+			if character.scout_enlisted: character.scout_hp = scout_max_hp
 			character.hp = character.max_hp
 			message = "旅店休整：生命已恢复。Demo 阶段免费。"
 		"potion":
@@ -401,7 +402,7 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
 	data = data.duplicate(true)
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
-	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "job_id", "familia_wins"]:
+	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "job_id", "familia_wins", "scout_enlisted", "scout_hp"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
@@ -418,13 +419,20 @@ static func from_save(data: Variant) -> RefCounted:
 	var owner: String = data.character.player_id
 	if data.character.familia_id not in ["", "dawn"]: return null
 	if data.character.familia_id.is_empty():
-		if not owner.is_empty() or data.character.party_enlisted or not data.character.growth_pending.is_empty(): return null
+		if not owner.is_empty() or data.character.party_enlisted or data.character.scout_enlisted or not data.character.growth_pending.is_empty(): return null
 	elif owner.length() != 32 or not owner.is_valid_hex_number(false): return null
 	if data.character.party_hp < 0 or data.character.party_hp > PlayerProgress.MAX_HP or (not data.character.party_enlisted and data.character.party_hp != 0): return null
-	if data.character.hp == 0 and (not data.character.party_enlisted or data.character.party_hp == 0): return null
+	if data.character.scout_hp < 0 or data.character.scout_hp > PlayerProgress.max_hp_for("scout") or (not data.character.scout_enlisted and data.character.scout_hp != 0): return null
+	if data.character.hp == 0 and (not data.character.party_enlisted or data.character.party_hp == 0) and (not data.character.scout_enlisted or data.character.scout_hp == 0): return null
 	if data.character.growth_pending.size() > 256: return null
-	for event_id in data.character.growth_pending:
-		if not event_id is String or event_id.is_empty() or event_id.length() > 300: return null
+	var pending_ids := {}
+	for index in range(data.character.growth_pending.size()):
+		var event: Variant = data.character.growth_pending[index]
+		if event is String: event = {"id": event, "members": ["squire"]}
+		if not event is Dictionary or not event.get("id") is String or event.id.is_empty() or event.id.length() > 300 or not PlayerProgress.valid_members(event.get("members")): return null
+		if pending_ids.has(event.id): return null
+		pending_ids[event.id] = true
+		data.character.growth_pending[index] = event
 	if data.character.potions < 0 or data.character.fire_potions < 0: return null
 	if data.character.gold < 0 or data.character.scrap < 0 or data.character.weapon not in ["training_sword", "iron_sword"]: return null
 	if data.character.experience < 0 or data.character.experience > 1000000 or data.character.level != CharacterLibrary.level_for(data.character.experience): return null

@@ -37,12 +37,13 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	Log.event("flow", "loaded", run.log_state())
 	active_character = run.character.duplicate(true)
 	retry_growth()
+	active_character = run.character.duplicate(true)
 	show_map = true
 	_change_scene(BATTLE_SCENE)
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-patrol-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-team-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -78,10 +79,11 @@ func start_character(profile_name: String = "洛恩") -> void:
 func return_to_menu() -> void:
 	_change_scene(MENU_SCENE)
 
-func party_companion() -> Dictionary:
-	if run == null or not run.character.party_enlisted or progress.data.get("player_id") != run.character.player_id: return {}
-	var member: Dictionary = progress.companion()
-	member.hp = mini(run.character.party_hp, member.max_hp)
+func party_companion(id: String = "squire") -> Dictionary:
+	var prefix := "party" if id == "squire" else "scout"
+	if id not in ["squire", "scout"] or run == null or not run.character[prefix + "_enlisted"] or progress.data.get("player_id") != run.character.player_id: return {}
+	var member: Dictionary = progress.companion(id)
+	member.hp = mini(run.character[prefix + "_hp"], member.max_hp)
 	return member
 
 func familia_service(action: String) -> bool:
@@ -113,6 +115,18 @@ func familia_service(action: String) -> bool:
 		hero.party_hp = 0
 		success = true
 		familia_message = "卫士已留在城市，共享成长保留。"
+	elif action == "enlist_scout" and not hero.scout_enlisted:
+		if progress.guild_level() < 2: familia_message = "晨行眷族等级 2 后可招募见习游侠。"
+		else:
+			hero.scout_enlisted = true
+			hero.scout_hp = progress.companion("scout").max_hp
+			success = true
+			familia_message = "见习游侠已编入队伍。本版免费招募。"
+	elif action == "dismiss_scout" and hero.scout_enlisted:
+		hero.scout_enlisted = false
+		hero.scout_hp = 0
+		success = true
+		familia_message = "游侠已留在城市，共享成长保留。"
 	elif action == "retry":
 		success = retry_growth()
 		familia_message = "成长记录已同步。" if success else progress.message
@@ -124,22 +138,27 @@ func familia_service(action: String) -> bool:
 func retry_growth() -> bool:
 	if run == null or run.character.growth_pending.is_empty(): return true
 	var before: Array = run.character.growth_pending.duplicate()
-	for event_id in before:
-		if not progress.award_victory(event_id, run.character.player_id): break
-		run.character.growth_pending.erase(event_id)
+	for event in before:
+		if not progress.award_victory(event.id, run.character.player_id, event.members): break
+		run.character.growth_pending.erase(event)
 	var success: bool = run.character.growth_pending.is_empty()
 	Log.event("familia", "sync", {"success": success, "before": before, "after": run.character.growth_pending.duplicate(), "reason": progress.message}, "INFO" if success else "WARN")
 	return success
 
-func settle_battle(hero: Dictionary, ally: Dictionary, victory: bool) -> bool:
+func settle_battle(hero: Dictionary, ally: Dictionary, victory: bool, scout: Dictionary = {}) -> bool:
 	if run == null or run.pending.is_empty(): return false
 	var settled := hero.duplicate(true)
+	var members: Array = []
 	if not ally.is_empty():
 		settled.party_hp = ally.hp
-		if victory:
-			var event_id: String = run.node(run.pending).key + "/clear/" + str(run.node(run.pending).clear_count + 1)
-			if event_id not in settled.growth_pending: settled.growth_pending.append(event_id)
-	if not run.finish_battle(settled, victory, not ally.is_empty()): return false
+		members.append("squire")
+	if not scout.is_empty():
+		settled.scout_hp = scout.hp
+		members.append("scout")
+	if victory and not members.is_empty():
+		var event_id: String = run.node(run.pending).key + "/clear/" + str(run.node(run.pending).clear_count + 1)
+		settled.growth_pending.append({"id": event_id, "members": members})
+	if not run.finish_battle(settled, victory, not members.is_empty()): return false
 	retry_growth()
 	if not run.character.growth_pending.is_empty(): run.message += " 共享成长待重试，请保存当前记录。"
 	active_character = run.character.duplicate(true)
@@ -147,7 +166,8 @@ func settle_battle(hero: Dictionary, ally: Dictionary, victory: bool) -> bool:
 
 func city_service(action: String) -> bool:
 	var member := party_companion()
-	return run != null and run.city_service(action, member.get("max_hp", 0))
+	var scout := party_companion("scout")
+	return run != null and run.city_service(action, member.get("max_hp", 0), scout.get("max_hp", 0))
 
 func guild_level() -> int:
 	if run == null or run.character.familia_id != "dawn" or not progress.refresh() or progress.data.get("player_id") != run.character.player_id: return 0
