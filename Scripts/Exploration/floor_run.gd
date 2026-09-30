@@ -90,8 +90,11 @@ func node(id: String) -> Dictionary:
 		if item.id == id: return item
 	return {}
 
+func has_living_party() -> bool:
+	return character.hp > 0 or (character.get("party_enlisted", false) and character.get("party_hp", 0) > 0)
+
 func can_enter(id: String) -> bool:
-	return phase == "descending" and not failed and pending.is_empty() and character.hp > 0 and id in node(current).get("next", []) and not node(id).is_empty()
+	return phase == "descending" and not failed and pending.is_empty() and has_living_party() and id in node(current).get("next", []) and not node(id).is_empty()
 
 func _advance_step() -> void:
 	steps_taken += 1
@@ -120,7 +123,7 @@ func _arrive(item: Dictionary, avoid: bool = false) -> String:
 	_record_position(item.key)
 	if item.kind == "rest" and not item.reward_claimed:
 		item.reward_claimed = true
-		character.hp = mini(character.max_hp, character.hp + 10)
+		if character.hp > 0: character.hp = mini(character.max_hp, character.hp + 10)
 		message = "营地休整：恢复 10 生命。"
 	elif item.kind == "cache" and not item.reward_claimed:
 		item.reward_claimed = true
@@ -164,7 +167,7 @@ func _load_floor(level: int) -> void:
 		generate_floor()
 
 func can_descend_floor() -> bool:
-	return phase == "descending" and current == "exit" and floor_number < total_floors and pending.is_empty() and not failed and character.hp > 0
+	return phase == "descending" and current == "exit" and floor_number < total_floors and pending.is_empty() and not failed and has_living_party()
 
 func descend_floor(expected_floor: int) -> bool:
 	var before := log_state()
@@ -222,7 +225,7 @@ func _finish_battle(hero: Dictionary, victory: bool) -> bool:
 	return true
 
 func can_begin_return() -> bool:
-	return phase == "descending" and not failed and pending.is_empty() and character.hp > 0 and not route.is_empty()
+	return phase == "descending" and not failed and pending.is_empty() and has_living_party() and not route.is_empty()
 
 func begin_return() -> bool:
 	var before := log_state()
@@ -239,7 +242,7 @@ func _begin_return() -> bool:
 	return true
 
 func can_begin_descent() -> bool:
-	return phase == "returning" and not failed and pending.is_empty() and character.hp > 0
+	return phase == "returning" and not failed and pending.is_empty() and has_living_party()
 
 func begin_descent() -> bool:
 	var before := log_state()
@@ -256,7 +259,7 @@ func _begin_descent() -> bool:
 
 func return_targets() -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	if phase != "returning" or not pending.is_empty() or character.hp <= 0: return result
+	if phase != "returning" or not pending.is_empty() or not has_living_party(): return result
 	if current == "entry":
 		if floor_number == 1:
 			result.append({"key": run_id + "/city", "floor": 0, "id": "city"})
@@ -314,18 +317,20 @@ func _enter_city() -> bool:
 	message = "已回到城市。战利品随身保留，可休整、补给或打造铁剑。"
 	return true
 
-func city_service(action: String) -> bool:
+func city_service(action: String, companion_max_hp: int = 0) -> bool:
 	var before := log_state()
-	var result := _city_service(action)
+	var result := _city_service(action, companion_max_hp)
 	Log.context["run_id"] = run_id
-	Log.event("exploration", "city_service", {"input": {"action": action}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	Log.event("exploration", "city_service", {"input": {"action": action, "companion_max_hp": companion_max_hp}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
 	return result
 
-func _city_service(action: String) -> bool:
+func _city_service(action: String, companion_max_hp: int = 0) -> bool:
 	if phase != "city": return false
 	match action:
 		"rest":
-			if character.hp >= character.max_hp: return false
+			if character.party_enlisted and companion_max_hp not in [28, 31, 34, 37, 40]: return false
+			if character.hp >= character.max_hp and (not character.party_enlisted or character.party_hp >= companion_max_hp): return false
+			if character.party_enlisted: character.party_hp = companion_max_hp
 			character.hp = character.max_hp
 			message = "旅店休整：生命已恢复。Demo 阶段免费。"
 		"potion":
@@ -355,7 +360,7 @@ func depart_city(next_seed: int) -> bool:
 	return result
 
 func _depart_city(next_seed: int) -> bool:
-	if phase != "city" or character.hp <= 0: return false
+	if phase != "city" or not has_living_party(): return false
 	var prepared := character.duplicate(true)
 	setup(next_seed, total_floors)
 	character = prepared
@@ -364,7 +369,7 @@ func _depart_city(next_seed: int) -> bool:
 
 func save_data() -> Dictionary:
 	# 地图与城市使用同一角色快照，旧记录读取不会向外部余额重复发奖。
-	if phase not in ["descending", "returning", "city"] or not pending.is_empty() or failed or character.hp <= 0: return {}
+	if phase not in ["descending", "returning", "city"] or not pending.is_empty() or failed or not has_living_party(): return {}
 	return {"seed": seed_value, "run_id": run_id, "total_floors": total_floors,
 		"floor_number": floor_number, "deepest_floor": deepest_floor, "phase": phase,
 		"current": current, "completed": completed, "steps_taken": steps_taken,
@@ -385,12 +390,22 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
 	data = data.duplicate(true)
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
-	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests"]:
+	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
 		if not data.character.has(key) or typeof(data.character[key]) != typeof(hero[key]): return null
-	if data.character.id != "lorn" or data.character.max_hp <= 0 or data.character.hp <= 0 or data.character.hp > data.character.max_hp: return null
+	if data.character.id != "lorn" or data.character.max_hp <= 0 or data.character.hp < 0 or data.character.hp > data.character.max_hp: return null
+	var owner: String = data.character.player_id
+	if data.character.familia_id not in ["", "dawn"]: return null
+	if data.character.familia_id.is_empty():
+		if not owner.is_empty() or data.character.party_enlisted or not data.character.growth_pending.is_empty(): return null
+	elif owner.length() != 32 or not owner.is_valid_hex_number(false): return null
+	if data.character.party_hp < 0 or data.character.party_hp > 40 or (not data.character.party_enlisted and data.character.party_hp != 0): return null
+	if data.character.hp == 0 and (not data.character.party_enlisted or data.character.party_hp == 0): return null
+	if data.character.growth_pending.size() > 256: return null
+	for event_id in data.character.growth_pending:
+		if not event_id is String or event_id.is_empty() or event_id.length() > 300: return null
 	if data.character.potions < 0 or data.character.fire_potions < 0: return null
 	if data.character.gold < 0 or data.character.scrap < 0 or data.character.weapon not in ["training_sword", "iron_sword"]: return null
 	if data.character.experience < 0 or data.character.experience > 1000000 or data.character.level != CharacterLibrary.level_for(data.character.experience): return null

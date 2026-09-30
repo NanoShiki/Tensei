@@ -135,7 +135,11 @@ func _refresh_continue() -> void:
 		if not flow.saves.message.is_empty(): status.text += " · 使用恢复存档"
 
 func _continue_journey() -> void:
-	if not get_node("/root/GameFlow").continue_exploration(): _refresh_continue()
+	var flow := get_node("/root/GameFlow")
+	if not flow.continue_exploration():
+		var reason: String = flow.saves.message
+		_refresh_continue()
+		status.text = reason
 
 func _open_saves() -> void:
 	var browser := preload("res://Scripts/UI/save_browser.gd").new()

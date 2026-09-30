@@ -36,6 +36,37 @@ def inspect(paths):
             if row["level"] == "ERROR":
                 errors.append(label + ": " + str(row["data"].get("message", row["data"])))
             data = row["data"]
+            if row["category"] == "familia":
+                try:
+                    if row["event"] == "victory_growth" and data["success"]:
+                        old, new = data["before"], data["after"]
+                        assert old["player_id"] == new["player_id"], "shared owner changed"
+                        before, after = old["familias"]["dawn"], new["familias"]["dawn"]
+                        if data["duplicate"]:
+                            assert old == new and data["id"] in before["events"], "duplicate shared reward"
+                        else:
+                            assert data["id"] not in before["events"] and after["events"].get(data["id"]) is True, "shared event ledger"
+                            assert after["contribution"] == before["contribution"] + 1 and after["squire_xp"] == before["squire_xp"] + 2, "shared growth reward"
+                            assert after["events"] == dict(before["events"], **{data["id"]: True}), "shared ledger changed history"
+                    if row["event"] == "service":
+                        before, after = data["before"], data["after"]
+                        if not data["success"]:
+                            assert before == after, "rejected familia service changed character"
+                        else:
+                            assert before["phase"] == "city" and before["steps"] == after["steps"] and before["respawn"] == after["respawn"], "familia service moved exploration"
+                            if data["action"] == "join":
+                                assert before["hero"]["familia_id"] == "" and before["hero"]["quests"]["hunt"] == "claimed", "familia qualification"
+                                assert after["hero"]["familia_id"] == "dawn" and after["hero"]["player_id"] == data["shared_after"]["player_id"], "familia owner binding"
+                            if data["action"] == "enlist":
+                                assert after["hero"]["party_enlisted"] and after["hero"]["party_hp"] > 0, "party enlist"
+                            if data["action"] == "dismiss":
+                                assert not after["hero"]["party_enlisted"] and after["hero"]["party_hp"] == 0, "party dismiss"
+                    if row["event"] == "sync":
+                        assert all(event in data["before"] for event in data["after"]), "sync invented event"
+                        if data["success"]:
+                            assert data["after"] == [], "successful sync still pending"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "inventory" and row["event"] == "field_potion":
                 try:
                     before, after = data["before"], data["after"]
@@ -94,13 +125,20 @@ def inspect(paths):
                             stock = "potions" if ability == "potion" else "fire_potions"
                             assert state["hero"][stock] == old["hero"][stock] - 1, "battle potion stock"
                             receiver = {"lorn": "hero", "squire": "ally", "goblin": "enemy"}[target]
+                            if ability == "potion":
+                                assert old[receiver]["hp"] > 0, "healed a downed member"
                             expected_hp = min(old[receiver]["hp"] + 12, old[receiver]["max_hp"]) if ability == "potion" else max(0, old[receiver]["hp"] - 8)
                             assert state[receiver]["hp"] == expected_hp, "battle potion effect"
                         if ability == "surge":
                             actor = "hero" if old["actor"] == "lorn" else "ally"
                             assert state[actor]["surge"] == old[actor]["surge"] - 1 and state[actor]["hp"] == min(old[actor]["hp"] + 8, old[actor]["max_hp"]), "member surge"
+                            other = "ally" if actor == "hero" else "hero"
+                            if old.get(other):
+                                assert state[other]["surge"] == old[other]["surge"] and state[other]["hp"] == old[other]["hp"], "surge changed another member"
                         if ability == "guard":
                             assert state["guarding" if old["actor"] == "lorn" else "ally_guarding"], "member guard"
+                            other = "ally_guarding" if old["actor"] == "lorn" else "guarding"
+                            assert state.get(other, False) == old.get(other, False), "guard changed another member"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
             if row["category"] != "exploration" or not data.get("success"):
@@ -133,6 +171,8 @@ def inspect(paths):
                     service = data["input"]["action"]
                     if service == "rest":
                         assert hero["hp"] == hero["max_hp"] and hero["gold"] == old["gold"], "free rest"
+                        if old.get("party_enlisted"):
+                            assert hero["party_hp"] == data["input"]["companion_max_hp"], "party rest"
                     if service == "potion":
                         assert hero["gold"] == old["gold"] - 3 and hero["potions"] == old["potions"] + 1, "potion transaction"
                     if service == "fire_potion":
