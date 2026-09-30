@@ -52,7 +52,14 @@ func _run() -> void:
 	check(run.enter_city(), "回城交付")
 	var hp: int = run.character.hp
 	var gold: int = run.character.gold
-	check(run.quest_service("hunt", "claim") and run.character.gold == gold + 6, "讨伐奖励一次加入金币")
+	current_scene.show_floor_map()
+	current_scene.city_buttons.quests.pressed.emit()
+	for child in current_scene.get_children():
+		if child is Window: board = child
+	board.buttons.hunt.pressed.emit()
+	check(run.character.quests.hunt == "claimed" and run.character.gold == gold + 6 and board.buttons.hunt.disabled, "实际领奖按钮加入一次金币并禁用")
+	board.close_requested.emit()
+	await frames()
 	check(run.character.level == 2 and run.character.max_hp == 40 and run.character.hp == hp, "升级增加生命上限并保留当前生命")
 	var snapshot: Dictionary = run.save_data()
 	check(not run.quest_service("hunt", "claim") and run.save_data() == snapshot, "重复领奖无副作用")
@@ -62,6 +69,11 @@ func _run() -> void:
 	run.character.captain_defeated = true
 	gold = run.character.gold
 	check(run.quest_service("captain", "claim") and run.character.gold == gold + 12 and run.character.level == 4, "首领目标交付并升级")
+	var not_accepted := Run.new()
+	not_accepted.setup(123)
+	not_accepted.enter("1a")
+	not_accepted.finish_battle(not_accepted.character, true)
+	check(not_accepted.character.hunt_wins == 0, "接取前战斗不计讨伐目标")
 	var insufficient := Run.new()
 	insufficient.setup(123)
 	insufficient.phase = "city"
