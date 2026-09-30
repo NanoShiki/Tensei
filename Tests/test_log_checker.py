@@ -22,6 +22,22 @@ class LogCheckerTests(unittest.TestCase):
             path.write_text(json.dumps(row), encoding="utf-8")
             self.assertIn("potion advanced exploration clock", inspect([path])[1][0])
 
+    def test_avoidance_keeps_loot_and_victory_unchanged(self):
+        before = {"steps": 0, "respawn": {}, "wins": 0, "hero": {"hp": 20, "max_hp": 36,
+            "gold": 0, "scrap": 0, "potions": 3, "fire_potions": 2}}
+        after = json.loads(json.dumps(before))
+        after.update(steps=1, pending="")
+        after["hero"]["fire_potions"] = 1
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "exploration",
+               "event": "enter", "data": {"input": {"avoid": True}, "success": True, "before": before, "after": after}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["hero"]["gold"] = 3
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("avoidance changed other character progress", inspect([path])[1][0])
+
     def test_quest_rewards_cannot_repeat(self):
         before = {"steps": 0, "respawn": {}, "phase": "city", "hero": {"gold": 0, "scrap": 3,
             "hp": 30, "max_hp": 36, "level": 1, "experience": 0, "quests": {"hunt": "active"}}}
