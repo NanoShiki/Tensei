@@ -124,11 +124,15 @@ def inspect(paths):
                         if row["event"] == "accept":
                             expected = json.loads(json.dumps(before))
                             assert old["quests"][quest] == "available", "quest already accepted"
+                            if quest == "familia_patrol":
+                                assert old["familia_id"] == "dawn" and data["guild_level"] >= 2, "member quest qualification"
                             expected["hero"]["quests"][quest] = "active"
                             expected["message"] = after.get("message")
                             assert expected == after, "accept changed resources"
                         elif row["event"] == "claim":
-                            gold, xp = {"hunt": (6, 10), "materials": (8, 15), "captain": (12, 25)}[quest]
+                            gold, xp = {"hunt": (6, 10), "materials": (8, 15), "captain": (12, 25), "familia_patrol": (10, 20)}[quest]
+                            if quest == "familia_patrol":
+                                assert old["familia_id"] == "dawn" and old["familia_wins"] == 5, "member quest incomplete"
                             assert old["quests"][quest] == "active" and hero["quests"][quest] == "claimed", "duplicate quest reward"
                             assert hero["gold"] == old["gold"] + gold and hero["experience"] == old["experience"] + xp, "quest reward"
                             assert hero["scrap"] == old["scrap"] - (3 if quest == "materials" else 0), "quest material cost"
@@ -197,6 +201,8 @@ def inspect(paths):
                     assert after["wins"] == before["wins"] + 1, "victory counted once"
                     source = data["input"]["hero"]
                     assert hero["gold"] == source["gold"] + 3 and hero["scrap"] == source["scrap"] + 1, "victory reward"
+                    qualifies = data["input"].get("with_party", False) and source.get("party_enlisted") and source.get("familia_id") == "dawn" and source["quests"].get("familia_patrol") == "active"
+                    assert hero.get("familia_wins", 0) == min(5, source.get("familia_wins", 0) + bool(qualifies)), "member victory progress"
                 if action == "city_service":
                     old = before["hero"]
                     service = data["input"]["action"]

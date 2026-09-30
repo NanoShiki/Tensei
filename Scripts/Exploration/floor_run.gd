@@ -191,14 +191,14 @@ func _descend_floor(expected_floor: int) -> bool:
 	message = "抵达第 %d 层，保留原地图与探索状态。" % floor_number
 	return true
 
-func finish_battle(hero: Dictionary, victory: bool) -> bool:
+func finish_battle(hero: Dictionary, victory: bool, with_party: bool = false) -> bool:
 	var before := log_state()
-	var result := _finish_battle(hero, victory)
+	var result := _finish_battle(hero, victory, with_party)
 	Log.context["run_id"] = run_id
-	Log.event("exploration", "finish_battle", {"input": {"hero": hero, "victory": victory}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	Log.event("exploration", "finish_battle", {"input": {"hero": hero, "victory": victory, "with_party": with_party}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
 	return result
 
-func _finish_battle(hero: Dictionary, victory: bool) -> bool:
+func _finish_battle(hero: Dictionary, victory: bool, with_party: bool = false) -> bool:
 	if pending.is_empty(): return false
 	var was_captain := is_captain_node(pending)
 	var previously_defeated: bool = character.get("captain_defeated", false)
@@ -214,6 +214,7 @@ func _finish_battle(hero: Dictionary, victory: bool) -> bool:
 		item.clear_count += 1
 		battles_won += 1
 		if character.quests.hunt == "active": character.hunt_wins = mini(3, character.hunt_wins + 1)
+		if with_party and character.party_enlisted and character.familia_id == "dawn" and character.quests.familia_patrol == "active": character.familia_wins = mini(5, character.familia_wins + 1)
 		character.gold += 3
 		character.scrap += 1
 		var random := RandomNumberGenerator.new()
@@ -400,11 +401,16 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
 	data = data.duplicate(true)
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
-	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "job_id"]:
+	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "job_id", "familia_wins"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
 		if not data.character.has(key) or typeof(data.character[key]) != typeof(hero[key]): return null
+	if not data.character.quests.has("familia_patrol"): data.character.quests["familia_patrol"] = "available"
+	if data.character.familia_wins < 0 or data.character.familia_wins > 5: return null
+	if data.character.quests.familia_patrol == "available" and data.character.familia_wins != 0: return null
+	if data.character.quests.familia_patrol != "available" and data.character.familia_id != "dawn": return null
+	if data.character.quests.familia_patrol == "claimed" and data.character.familia_wins != 5: return null
 	if not Jobs.ENTRIES.has(data.character.job_id): return null
 	for key in ["ac", "attack", "dex"]:
 		if data.character[key] != Jobs.resolve(data.character)[key]: return null
@@ -514,14 +520,14 @@ func encounter_preview(id: String) -> Dictionary:
 	if item.kind != "battle" or (not item.enemy_active and item.respawn_in != 1): return {}
 	return {"id": id, "name": Enemies.ENTRIES[item.enemy_kind].name, "enemy_kind": item.enemy_kind, "details": Enemies.preview(item.enemy_kind, floor_number), "stock": character.fire_potions, "cost": 1, "can_avoid": character.fire_potions >= 1}
 
-func quest_service(id: String, action: String) -> bool:
+func quest_service(id: String, action: String, guild_level: int = 0) -> bool:
 	var before := log_state()
-	var reason := "仅可在城市整备接取和交付。" if phase != "city" or not pending.is_empty() else ("队伍已失去行动能力，请先休整。" if not has_living_party() else Quests.reason(character, id, action))
-	var success: bool = reason.is_empty() and Quests.apply(character, id, action)
+	var reason := "仅可在城市整备接取和交付。" if phase != "city" or not pending.is_empty() else ("队伍已失去行动能力，请先休整。" if not has_living_party() else Quests.reason(character, id, action, guild_level))
+	var success: bool = reason.is_empty() and Quests.apply(character, id, action, guild_level)
 	if success:
 		message = "已接取：%s。" % Quests.DEFINITIONS[id].name if action == "accept" else "委托已交付：金币 +%d，经验 +%d；等级 %d。" % [Quests.DEFINITIONS[id].gold, Quests.DEFINITIONS[id].xp, character.level]
 	Log.context["run_id"] = run_id
-	Log.event("quest", action, {"id": id, "success": success, "reason": reason, "before": before, "after": log_state()}, "INFO" if success else "WARN")
+	Log.event("quest", action, {"id": id, "guild_level": guild_level, "success": success, "reason": reason, "before": before, "after": log_state()}, "INFO" if success else "WARN")
 	return success
 
 func job_service(id: String) -> bool:
