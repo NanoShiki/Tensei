@@ -74,6 +74,23 @@ func _run() -> void:
 	malformed.familias.dawn.contribution = 1
 	malformed.familias.dawn.squire_xp = 2
 	check(not Progress.valid(malformed), "贡献账本必须严格布尔类型")
+	current_run.phase = "city"
+	current_run.character.hp = 0
+	current_run.character.party_hp = 9
+	current_scene.show_floor_map()
+	var untouched: Dictionary = current_run.character.duplicate(true)
+	current_scene.city_buttons.rest.pressed.emit()
+	check("共享档案不可用" in current_run.message and current_run.character == untouched, "旅店无法确认队友时显示原因且不部分恢复")
+	current_scene.city_buttons.familia.pressed.emit()
+	var windows := 0
+	for child in current_scene.get_children():
+		if child is Window and child.visible: windows += 1
+	current_scene._open_familia()
+	current_scene._open_jobs()
+	var after_windows := 0
+	for child in current_scene.get_children():
+		if child is Window and child.visible: after_windows += 1
+	check(windows == 1 and after_windows == 1, "已有城市窗口时不重复打开眷族或职业窗口")
 	var cleanup = LibraryTest.new()
 	cleanup.cleanup(base)
 	cleanup.free()

@@ -3,6 +3,8 @@ extends RefCounted
 const Log = preload("res://Scripts/Core/game_log.gd")
 const Quests = preload("res://Scripts/Character/quest_library.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
+const Jobs = preload("res://Scripts/Character/job_library.gd")
+const PlayerProgress = preload("res://Scripts/Core/player_progress.gd")
 var floor_number := 1
 var total_floors := 30
 var seed_value := 1
@@ -328,7 +330,9 @@ func _city_service(action: String, companion_max_hp: int = 0) -> bool:
 	if phase != "city": return false
 	match action:
 		"rest":
-			if character.party_enlisted and companion_max_hp not in [28, 31, 34, 37, 40]: return false
+			if character.party_enlisted and not PlayerProgress.valid_hp_limit(companion_max_hp):
+				message = "卫士共享档案不可用，无法确认生命上限。请恢复同一玩家共享备份后重试。"
+				return false
 			if character.hp >= character.max_hp and (not character.party_enlisted or character.party_hp >= companion_max_hp): return false
 			if character.party_enlisted: character.party_hp = companion_max_hp
 			character.hp = character.max_hp
@@ -390,18 +394,21 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
 	data = data.duplicate(true)
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
-	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending"]:
+	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "job_id"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
 		if not data.character.has(key) or typeof(data.character[key]) != typeof(hero[key]): return null
+	if not Jobs.ENTRIES.has(data.character.job_id): return null
+	for key in ["ac", "attack", "dex"]:
+		if data.character[key] != Jobs.resolve(data.character)[key]: return null
 	if data.character.id != "lorn" or data.character.max_hp <= 0 or data.character.hp < 0 or data.character.hp > data.character.max_hp: return null
 	var owner: String = data.character.player_id
 	if data.character.familia_id not in ["", "dawn"]: return null
 	if data.character.familia_id.is_empty():
 		if not owner.is_empty() or data.character.party_enlisted or not data.character.growth_pending.is_empty(): return null
 	elif owner.length() != 32 or not owner.is_valid_hex_number(false): return null
-	if data.character.party_hp < 0 or data.character.party_hp > 40 or (not data.character.party_enlisted and data.character.party_hp != 0): return null
+	if data.character.party_hp < 0 or data.character.party_hp > PlayerProgress.MAX_HP or (not data.character.party_enlisted and data.character.party_hp != 0): return null
 	if data.character.hp == 0 and (not data.character.party_enlisted or data.character.party_hp == 0): return null
 	if data.character.growth_pending.size() > 256: return null
 	for event_id in data.character.growth_pending:
@@ -465,6 +472,7 @@ func log_state() -> Dictionary:
 		"hero": character.duplicate(true), "respawn": timers, "message": message}
 
 func potion_reason() -> String:
+	if character.hp <= 0: return "洛恩已倒下，普通药水不能复活。请让存活队友带队回城，在旅店休整。"
 	if phase not in ["descending", "returning", "city"] or not pending.is_empty() or failed or character.hp <= 0:
 		return "请在探索地图或城市安全状态下使用。"
 	if character.potions <= 0: return "治疗药水已用尽。"
@@ -499,10 +507,23 @@ func encounter_preview(id: String) -> Dictionary:
 
 func quest_service(id: String, action: String) -> bool:
 	var before := log_state()
-	var reason := "仅可在城市整备接取和交付。" if phase != "city" or not pending.is_empty() or character.hp <= 0 else Quests.reason(character, id, action)
+	var reason := "仅可在城市整备接取和交付。" if phase != "city" or not pending.is_empty() else ("队伍已失去行动能力，请先休整。" if not has_living_party() else Quests.reason(character, id, action))
 	var success: bool = reason.is_empty() and Quests.apply(character, id, action)
 	if success:
 		message = "已接取：%s。" % Quests.DEFINITIONS[id].name if action == "accept" else "委托已交付：金币 +%d，经验 +%d；等级 %d。" % [Quests.DEFINITIONS[id].gold, Quests.DEFINITIONS[id].xp, character.level]
 	Log.context["run_id"] = run_id
 	Log.event("quest", action, {"id": id, "success": success, "reason": reason, "before": before, "after": log_state()}, "INFO" if success else "WARN")
 	return success
+
+func job_service(id: String) -> bool:
+	var before := log_state()
+	var reason := ""
+	if phase != "city" or not pending.is_empty(): reason = "请在城市整备时选择职业。"
+	elif not Jobs.ENTRIES.has(id): reason = "职业内容不存在。"
+	elif character.job_id == id: reason = "当前已是此职业。"
+	if reason.is_empty():
+		Jobs.apply(character, id)
+		message = "已选择%s。个人等级、生命、任务、装备与眷族保留；请手动保存。" % Jobs.ENTRIES[id].name
+	Log.context["run_id"] = run_id
+	Log.event("job", "select", {"id": id, "success": reason.is_empty(), "reason": reason, "before": before, "after": log_state()}, "INFO" if reason.is_empty() else "WARN")
+	return reason.is_empty()

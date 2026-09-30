@@ -3,6 +3,7 @@ extends RefCounted
 const Log = preload("res://Scripts/Core/game_log.gd")
 const Abilities = preload("res://Scripts/Battle/ability_library.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
+const Jobs = preload("res://Scripts/Character/job_library.gd")
 var battle_id := ""
 var hero: Dictionary
 var enemy: Dictionary
@@ -71,6 +72,8 @@ func reason(id: String) -> String:
 	if outcome != "ongoing": return "战斗已结束"
 	if not is_player_turn(): return "等待敌人行动"
 	if not Abilities.ENTRIES.has(id): return "未知技能"
+	var job_reason: String = Jobs.reason(current_unit(), id)
+	if not job_reason.is_empty(): return job_reason
 	if action <= 0: return "本回合行动次数已用尽"
 	var entry: Dictionary = Abilities.ENTRIES[id]
 	if entry.has("stock") and int(hero.get(entry.stock, 0)) <= 0: return "药水已用尽"
@@ -108,7 +111,7 @@ func _use_ability(id: String, target: String) -> bool:
 		logs.append("%s → %s：%s 生命。" % [entry.name, receiver.name, text])
 		last_event = {"actor": actor.id, "target": receiver.id, "text": text}
 	elif entry.target == "enemy":
-		_attack(actor, enemy, int(entry.die), int(entry.bonus) + CharacterLibrary.weapon_bonus(actor), int(entry.get("penalty", 0)))
+		_attack(actor, enemy, int(entry.die), int(entry.bonus) + (CharacterLibrary.weapon_bonus(actor) if entry.get("weapon_bonus", true) else 0), int(entry.get("penalty", 0)))
 	elif id == "guard":
 		if actor.id == "lorn": guarding = true
 		else: ally_guarding = true
@@ -224,7 +227,7 @@ func is_player_turn() -> bool:
 	return current_id() in ["lorn", "squire"]
 
 func can_target(id: String, target_id: String) -> bool:
-	if not Abilities.ENTRIES.has(id) or not is_player_turn(): return false
+	if not Abilities.ENTRIES.has(id) or not is_player_turn() or not Jobs.reason(current_unit(), id).is_empty(): return false
 	var receiver := unit(target_id)
 	if receiver.is_empty() or receiver.hp <= 0: return false
 	if id == "potion": return target_id in ["lorn", "squire"] and receiver.hp < receiver.max_hp

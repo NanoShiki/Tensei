@@ -89,6 +89,8 @@ func _run() -> void:
 		run.step_return(run.return_targets()[0].key)
 		if not run.pending.is_empty(): flow.settle_battle(run.character, flow.party_companion(), true)
 	check(run.character.hp == 0 and run.enter_city(), "营地不复活倒下主角，队友可安全回城")
+	check(run.quest_service("materials", "accept"), "主角倒下但队友存活仍可接城市委托")
+	check(not run.use_field_potion() and "不能复活" in run.potion_reason(), "倒下主角不能野外药水复活且提示准确")
 	current_scene.show_floor_map()
 	check(not current_scene.city_buttons.rest.disabled, "队伍受伤时旅店按钮可用")
 	current_scene.city_buttons.rest.pressed.emit()

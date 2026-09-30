@@ -3,6 +3,10 @@ extends RefCounted
 const Log = preload("res://Scripts/Core/game_log.gd")
 const VERSION := 1
 const CONTENT_VERSION := "demo-familia-1"
+const BASE_HP := 28
+const HP_PER_LEVEL := 3
+const MAX_LEVEL := 5
+const MAX_HP := BASE_HP + HP_PER_LEVEL * (MAX_LEVEL - 1)
 var base_path := "user://player.familia"
 var data: Dictionary = {}
 var message := ""
@@ -128,7 +132,11 @@ func companion() -> Dictionary:
 	var level := 1
 	for threshold in [10, 25, 50, 85]:
 		if xp >= threshold: level += 1
-	return {"id": "squire", "name": "见习卫士", "hp": 28 + 3 * (level - 1), "max_hp": 28 + 3 * (level - 1), "ac": 13, "attack": 4, "dex": 1, "surge": 1, "weapon": "training_sword", "level": level, "experience": xp}
+	var hp := BASE_HP + HP_PER_LEVEL * (level - 1)
+	return {"id": "squire", "name": "见习卫士", "hp": hp, "max_hp": hp, "ac": 13, "attack": 4, "dex": 1, "surge": 1, "weapon": "training_sword", "level": level, "experience": xp}
+
+static func valid_hp_limit(hp: int) -> bool:
+	return hp >= BASE_HP and hp <= MAX_HP and (hp - BASE_HP) % HP_PER_LEVEL == 0
 
 func guild_level() -> int:
 	if data.is_empty(): return 1
