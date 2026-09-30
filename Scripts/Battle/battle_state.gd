@@ -15,13 +15,18 @@ var guarding := false
 var outcome := "ongoing"
 var logs: Array[String] = []
 var last_event: Dictionary = {}
+var charging := false
 
-func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1) -> void:
+func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1, captain: bool = false) -> void:
 	battle_id = Crypto.new().generate_random_bytes(8).hex_encode()
 	hero = character.duplicate(true)
 	hero["surge"] = 1
 	enemy = {"id": "goblin", "name": "哥布林", "max_hp": 22 + mini(floor_number - 1, 20),
 		"ac": 12, "attack": 3, "dex": 1}
+	enemy["captain"] = captain
+	charging = false
+	if captain:
+		enemy.merge({"name": "守关队长", "max_hp": 44, "ac": 13, "attack": 4, "dex": 1}, true)
 	enemy["hp"] = enemy.max_hp
 	if seed_value < 0:
 		rng.randomize()
@@ -37,14 +42,14 @@ func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1) -
 	var h := rng.randi_range(1, 20) + int(hero.dex)
 	var e := rng.randi_range(1, 20) + int(enemy.dex)
 	order.assign(["lorn", "goblin"] if h >= e else ["goblin", "lorn"])
-	logs.append("先攻：洛恩 %d / 哥布林 %d。" % [h, e])
+	logs.append("先攻：洛恩 %d / %s %d。" % [h, enemy.name, e])
 	if hero.hp <= 0:
 		outcome = "defeat"
 	Log.event("battle", "start", {"seed": str(rng.seed), "order": order, "state": log_state()})
 
 func log_state() -> Dictionary:
 	return {"battle_id": battle_id, "hero": hero.duplicate(true), "enemy": enemy.duplicate(true), "round": round_number,
-		"actor": current_id(), "actions": action, "guarding": guarding, "outcome": outcome,
+		"actor": current_id(), "actions": action, "guarding": guarding, "outcome": outcome, "charging": charging,
 		"last_event": last_event.duplicate(true)}
 
 func current_id() -> String:
@@ -139,10 +144,20 @@ func enemy_turn() -> bool:
 
 func _enemy_turn() -> bool:
 	if current_id() != "goblin": return false
-	_attack(enemy, hero, 6, 1)
+	if enemy.captain and not charging:
+		charging = true
+		logs.append("守关队长正在蓄力，下次行动将释放重击。")
+		last_event = {"actor": "goblin", "target": "goblin", "text": "蓄力 · 下次重击"}
+	else:
+		_attack(enemy, hero, 10 if enemy.captain else 6, 4 if enemy.captain else 1)
+		charging = false
 	_check_outcome()
 	if outcome == "ongoing": _advance()
 	return true
+
+func enemy_intent() -> String:
+	if not enemy.get("captain", false): return ""
+	return "敌方意图：重击 · 命中 +4 · 1d10+4；可用闪避应对" if charging else "敌方意图：蓄力 · 本次不攻击，下次行动重击"
 
 func _advance() -> void:
 	cursor += 1

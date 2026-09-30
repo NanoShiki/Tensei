@@ -178,8 +178,12 @@ func finish_battle(hero: Dictionary, victory: bool) -> bool:
 
 func _finish_battle(hero: Dictionary, victory: bool) -> bool:
 	if pending.is_empty(): return false
+	var was_captain := is_captain_node(pending)
+	var previously_defeated: bool = character.get("captain_defeated", false)
 	character = hero.duplicate(true)
+	character.captain_defeated = previously_defeated
 	if victory:
+		if was_captain: character.captain_defeated = true
 		current = pending
 		node(current).done = true
 		node(current).cleared = true
@@ -195,6 +199,9 @@ func _finish_battle(hero: Dictionary, victory: bool) -> bool:
 		item.respawn_in = item.respawn_total
 		_record_position(item.key)
 		message = "战斗胜利：金币 +3、铁片 +1。此处怪物将在再走 %d 步后刷新。" % item.respawn_in
+		if was_captain:
+			message = "已击败守关队长！阶段目标达成，可以自由返程回城。金币 +3、铁片 +1。"
+			Log.event("objective", "captain_defeated", {"run_id": run_id, "first_clear": not previously_defeated})
 	else:
 		failed = true
 		phase = "failed"
@@ -360,7 +367,7 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
 	data = data.duplicate(true)
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
-	for key in ["gold", "scrap", "weapon"]:
+	for key in ["gold", "scrap", "weapon", "captain_defeated"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
@@ -425,6 +432,9 @@ func potion_reason() -> String:
 	if character.potions <= 0: return "治疗药水已用尽。"
 	if character.hp >= character.max_hp: return "生命已满，无需使用。"
 	return ""
+
+func is_captain_node(id: String) -> bool:
+	return floor_number == 3 and id == "1a"
 
 func use_field_potion() -> bool:
 	var before := log_state()
