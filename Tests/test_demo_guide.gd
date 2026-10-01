@@ -28,7 +28,7 @@ func _run() -> void:
 	flow.return_to_menu()
 	await frames()
 	current_scene.guide_button.pressed.emit()
-	check(guide() != null and guide().stage_labels.size() == 6 and "新角色" in guide().summary.text, "主菜单提供完整只读流程")
+	check(guide() != null and guide().stage_labels.size() == 8 and "新角色" in guide().summary.text, "主菜单提供完整只读流程")
 	current_scene._open_guide()
 	var count := 0
 	for child in current_scene.get_children():
@@ -45,6 +45,7 @@ func _run() -> void:
 	var snapshot: Dictionary = flow.run.save_data()
 	current_scene._open_guide()
 	check(guide() != null and "未加入" in guide().stage_labels.familia.text and "城市委托" in guide().stage_labels.prepare.text, "新角色显示真实阶段状态")
+	check("布衣" in guide().stage_labels.equipment.text and "铁甲" in guide().stage_labels.equipment.text and "供货未交付" in guide().stage_labels.commerce.text and "不写原角色" in guide().stage_labels.practice.text, "新模块说明与实际个人状态可查")
 	key.keycode = KEY_B
 	current_scene._input(key)
 	check(current_scene.inventory == null and flow.run.save_data() == snapshot, "指南阻止底层背包快捷键，保持旅程状态")
@@ -55,11 +56,21 @@ func _run() -> void:
 	snapshot = flow.run.save_data()
 	current_scene._open_guide()
 	check("2 / 3" in guide().stage_labels.growth.text and flow.run.save_data() == snapshot, "已接取进度按当前记录展示且不改写")
+	guide().queue_free()
+	await frames()
+	flow.run.character.armor = "iron_armor"
+	flow.run.character.armors.append("iron_armor")
+	flow.run.character.ac += 1
+	flow.run.character.commerce_done.append("supply_order")
+	current_scene.show_floor_map()
+	snapshot = flow.run.save_data()
+	current_scene._open_guide()
+	check("铁甲 · AC 15" in guide().stage_labels.equipment.text and "供货已交付" in guide().stage_labels.commerce.text and flow.run.save_data() == snapshot, "实际护甲及订单时点显示且保持只读")
 	var capture := OS.get_environment("TENSEI_GUIDE_CAPTURE")
 	if not capture.is_empty():
 		root.size = Vector2i(960, 540)
 		await frames()
-		guide().scroll.scroll_vertical = 400
+		guide().scroll.scroll_vertical = int(guide().stage_labels.commerce.position.y)
 		await process_frame
 		await RenderingServer.frame_post_draw
 		root.get_texture().get_image().save_png(capture)
