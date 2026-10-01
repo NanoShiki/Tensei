@@ -90,11 +90,11 @@ def inspect(paths):
                             assert before == after, "rejected familia service changed character"
                         else:
                             assert before["phase"] == "city" and before["steps"] == after["steps"] and before["respawn"] == after["respawn"], "familia service moved exploration"
-                            if data["action"] in ("join", "join_ember"):
-                                target = "dawn" if data["action"] == "join" else "ember"
+                            if data["action"] in ("join", "join_ember", "join_harbor"):
+                                target = {"join": "dawn", "join_ember": "ember", "join_harbor": "harbor"}[data["action"]]
                                 old, hero = before["hero"], after["hero"]
-                                assert old["familia_id"] != target and old["hp"] > 0 and not old["growth_pending"] and not old.get("forge_pending", []), "familia transfer prerequisites"
-                                assert old["quests"]["hunt"] == "claimed" if target == "dawn" else "iron_sword" in old.get("weapons", [old["weapon"]]), "familia qualification"
+                                assert old["familia_id"] != target and old["hp"] > 0 and not old["growth_pending"] and not old.get("forge_pending", []) and not old.get("commerce_pending", []), "familia transfer prerequisites"
+                                assert {"dawn": old["quests"]["hunt"] == "claimed", "ember": "iron_sword" in old.get("weapons", [old["weapon"]]), "harbor": "supply_order" in old.get("commerce_done", [])}[target], "familia qualification"
                                 assert hero["familia_id"] == target and hero["player_id"] == data["shared_after"]["player_id"], "familia owner binding"
                                 expected = json.loads(json.dumps(before))
                                 expected["hero"].update(familia_id=target, player_id=hero["player_id"], party_enlisted=False, party_hp=0, scout_enlisted=False, scout_hp=0)
@@ -116,19 +116,19 @@ def inspect(paths):
                             assert data["after"] == [], "successful sync still pending"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
-            if row["category"] == "workshop":
+            if row["category"] in ("workshop", "commerce"):
                 try:
                     if row["event"] == "contribution" and data["success"]:
                         old, new = data["before"], data["after"]
                         expected = json.loads(json.dumps(old))
-                        guild = expected["familias"]["ember"]
+                        guild = expected["familias"]["ember" if row["category"] == "workshop" else "harbor"]
                         if data["duplicate"]:
                             assert guild["events"].get(data["id"]) is True, "duplicate forge missing ledger"
                         else:
                             assert data["id"] not in guild["events"], "forge reward already recorded"
                             guild["events"][data["id"]] = True
                             guild["contribution"] += 1
-                        assert expected == new, "forge contribution changed unrelated shared growth"
+                        assert expected == new, "forge contribution changed unrelated shared growth" if row["category"] == "workshop" else "commerce contribution changed unrelated shared growth"
                     if row["event"] == "craft":
                         old, new = data["before"], data["after"]
                         expected = json.loads(json.dumps(old))
@@ -148,6 +148,22 @@ def inspect(paths):
                     if row["event"] == "sync":
                         assert all(event in data["before"] for event in data["after"]), "forge sync invented event"
                         if data["success"]: assert not data["after"], "successful forge sync still pending"
+                    if row["event"] in ("service", "exchange") and row["category"] == "commerce":
+                        old, new = data["before"], data["after"]
+                        expected = json.loads(json.dumps(old))
+                        expected["message"] = new["message"]
+                        if data["success"]:
+                            hero = old["hero"]
+                            assert old["phase"] == "city" and not old["pending"] and data["id"] not in hero["commerce_done"] and not hero["commerce_pending"], "commerce prerequisites"
+                            gold, scrap, potions = {"supply_order": (5, -2, 0), "member_bundle": (-6, 0, 3)}[data["id"]]
+                            assert hero["gold"]+gold >= 0 and hero["scrap"]+scrap >= 0, "commerce funds"
+                            if data["id"] == "member_bundle": assert hero["familia_id"] == "harbor" and data["harbor_level"] >= 1 and "supply_order" in hero["commerce_done"], "commerce member qualification"
+                            expected["hero"].update(gold=hero["gold"]+gold, scrap=hero["scrap"]+scrap, potions=hero["potions"]+potions, commerce_done=hero["commerce_done"]+[data["id"]])
+                            if row["event"] == "exchange":
+                                assert not hero["player_id"] or hero["player_id"] == data["player_id"], "commerce rebound owner"
+                                assert new["hero"]["commerce_pending"] in ([], [data["event_id"]]), "commerce outbox"
+                                expected["hero"].update(player_id=data["player_id"], commerce_pending=new["hero"]["commerce_pending"])
+                        assert expected == new, "commerce changed unrelated personal progress"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
             if row["category"] == "station" and row["event"] == "service":

@@ -8,6 +8,21 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_commerce_delivery_preserves_membership_and_clock(self):
+        old = {"phase": "city", "pending": "", "steps": 7, "message": "old", "hero": {"gold": 1, "scrap": 2, "potions": 3,
+            "player_id": "test", "familia_id": "dawn", "commerce_done": [], "commerce_pending": []}}
+        new = json.loads(json.dumps(old))
+        new["hero"].update(gold=6, scrap=0, commerce_done=["supply_order"])
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "commerce", "event": "exchange",
+            "data": {"id": "supply_order", "event_id": "event-test", "player_id": "test", "success": True, "before": old, "after": new}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            new["hero"]["familia_id"] = "harbor"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("commerce changed unrelated personal progress", inspect([path])[1][0])
+
     def test_station_heals_living_members_without_advancing_clock(self):
         old = {"phase": "descending", "floor": 5, "node": "entry", "pending": "", "steps": 17, "respawn": {"a": 2}, "message": "old",
             "hero": {"hp": 5, "max_hp": 36, "party_enlisted": True, "party_hp": 0, "scout_enlisted": True, "scout_hp": 5, "gold": 8}}

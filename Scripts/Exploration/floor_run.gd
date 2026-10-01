@@ -8,6 +8,7 @@ const PlayerProgress = preload("res://Scripts/Core/player_progress.gd")
 const Enemies = preload("res://Scripts/Battle/enemy_library.gd")
 const Familias = preload("res://Scripts/Character/familia_library.gd")
 const Weapons = preload("res://Scripts/Character/weapon_library.gd")
+const Commerce = preload("res://Scripts/Character/commerce_library.gd")
 var floor_number := 1
 var total_floors := 30
 var seed_value := 1
@@ -400,6 +401,21 @@ func station_reason(action: String, companion_max_hp: int = 0, scout_max_hp: int
 		if not hurt: return "存活成员均满血；休整不能复活倒下成员。"
 	return ""
 
+func commerce_service(id: String, harbor_level: int = 0) -> bool:
+	var before := log_state()
+	var reason := "请在城市交付订单。" if phase != "city" or not pending.is_empty() else Commerce.reason(character, id, harbor_level)
+	var success := reason.is_empty()
+	if success:
+		var order: Dictionary = Commerce.ENTRIES[id]
+		character.gold += order.gold
+		character.scrap += order.scrap
+		character.potions += order.potions
+		character.commerce_done.append(id)
+		message = order.name + "已完成；" + order.description
+	else: message = reason
+	Log.event("commerce", "service", {"id": id, "harbor_level": harbor_level, "success": success, "reason": reason, "before": before, "after": log_state()}, "INFO" if success else "WARN")
+	return success
+
 func station_service(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0) -> bool:
 	var before := log_state()
 	var reason := station_reason(action, companion_max_hp, scout_max_hp)
@@ -460,7 +476,7 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
 	data = data.duplicate(true)
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
-	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "forge_pending", "job_id", "familia_wins", "scout_enlisted", "scout_hp", "depth_goal"]:
+	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "forge_pending", "commerce_done", "commerce_pending", "job_id", "familia_wins", "scout_enlisted", "scout_hp", "depth_goal"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	if not data.character.has("weapons"):
 		data.character.weapons = ["training_sword"]
@@ -489,7 +505,18 @@ static func from_save(data: Variant) -> RefCounted:
 		if data.character.party_enlisted or data.character.scout_enlisted or not data.character.growth_pending.is_empty(): return null
 	if not owner.is_empty():
 		if owner.length() != 32 or not owner.is_valid_hex_number(false): return null
-	elif not data.character.familia_id.is_empty() or not data.character.forge_pending.is_empty(): return null
+	elif not data.character.familia_id.is_empty() or not data.character.forge_pending.is_empty() or not data.character.commerce_pending.is_empty(): return null
+	if data.character.commerce_done.size() > Commerce.ENTRIES.size() or data.character.commerce_pending.size() > Commerce.ENTRIES.size(): return null
+	var order_ids := {}
+	for order in data.character.commerce_done:
+		if not order is String or not Commerce.ENTRIES.has(order) or order_ids.has(order): return null
+		order_ids[order] = true
+	if order_ids.has("member_bundle") and not order_ids.has("supply_order"): return null
+	if data.character.familia_id == "harbor" and not order_ids.has("supply_order"): return null
+	var trade_ids := {}
+	for event in data.character.commerce_pending:
+		if not PlayerProgress.valid_commerce_event(event) or trade_ids.has(event) or not order_ids.has(event.get_slice("/", 3)): return null
+		trade_ids[event] = true
 	if data.character.forge_pending.size() > 2: return null
 	var forge_ids := {}
 	for event in data.character.forge_pending:

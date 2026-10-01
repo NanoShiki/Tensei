@@ -58,6 +58,7 @@ func _initialize() -> void:
 	team.base_path = base + "-team"
 	var legacy := Progress.initial()
 	legacy.familias.erase("ember")
+	legacy.familias.erase("harbor")
 	legacy.familias.dawn.erase("scout_xp")
 	legacy.familias.dawn.events = {"legacy": true}
 	legacy.familias.dawn.contribution = 1
@@ -71,11 +72,21 @@ func _initialize() -> void:
 	previous.base_path = base + "-previous"
 	var old_two := team.data.duplicate(true)
 	old_two.familias.erase("ember")
+	old_two.familias.erase("harbor")
 	payload = var_to_bytes(old_two)
 	write_data(previous.base_path + ".0.save", {"version": 1, "content_version": "demo-familia-2", "generation": 1, "payload": payload, "checksum": previous._checksum(payload)})
 	original = FileAccess.get_file_as_bytes(previous.base_path + ".0.save")
 	check(previous.refresh() and previous.data.familias.dawn == old_two.familias.dawn and previous.data.familias.ember.contribution == 0, "旧参战名单档案补独立炉心记录且晨行账本不变")
 	check(FileAccess.get_file_as_bytes(previous.base_path + ".0.save") == original, "旧第二版共享读取保留原字节")
+	var old_three := previous.data.duplicate(true)
+	old_three.familias.erase("harbor")
+	old_three.familias.ember.events = {"profile/legacy/forge/iron_sword": true}
+	old_three.familias.ember.contribution = 1
+	payload = var_to_bytes(old_three)
+	write_data(previous.base_path + ".1.save", {"version": 1, "content_version": "demo-familia-3", "generation": 2, "payload": payload, "checksum": previous._checksum(payload)})
+	original = FileAccess.get_file_as_bytes(previous.base_path + ".1.save")
+	check(previous.refresh() and previous.data.familias.ember == old_three.familias.ember and previous.data.familias.dawn == old_three.familias.dawn and previous.data.familias.harbor.contribution == 0, "第三版共享补集市，晨行与炉心积累完整保留")
+	check(FileAccess.get_file_as_bytes(previous.base_path + ".1.save") == original, "第三版读取只在内存迁移且原字节不变")
 	invalid = previous.data.duplicate(true)
 	invalid.familias.ember.events["bad"] = 1
 	invalid.familias.ember.contribution = 1
@@ -103,11 +114,13 @@ func _restart_check(phase: String) -> void:
 		check(progress.ensure(), "独立进程建立共享身份")
 		for i in range(5): check(progress.award_victory("restart-" + str(i), progress.data.player_id, ["squire", "scout"]), "独立进程写入两位队友共享成长")
 		check(progress.award_forge(Progress.forge_event("legacy"), progress.data.player_id), "独立进程写入锻造贡献")
+		check(progress.award_commerce(Progress.commerce_event("legacy", "supply_order"), progress.data.player_id), "独立进程写入商贸贡献")
 	else:
 		check(progress.refresh() and progress.companion().level == 2 and progress.companion("scout").level == 2 and progress.guild_level() == 2, "新进程恢复玩家身份、两位队友与组织成长")
 		var generation: int = progress.inspect().generation
 		check(progress.award_victory("restart-0", progress.data.player_id) and progress.inspect().generation == generation, "新进程恢复去重账本")
 		check(progress.data.familias.ember.contribution == 1 and progress.award_forge(Progress.forge_event("legacy"), progress.data.player_id) and progress.inspect().generation == generation, "新进程恢复锻造贡献和去重且不重复写盘")
+		check(progress.data.familias.harbor.contribution == 1 and progress.award_commerce(Progress.commerce_event("legacy", "supply_order"), progress.data.player_id) and progress.inspect().generation == generation, "新进程恢复商贸贡献和去重且不重复写盘")
 		for suffix in [".0.save", ".1.save", ".tmp"]: DirAccess.remove_absolute(progress.base_path + suffix)
 	print("FAMILIA RESTART CHECKS: ", failures, " failures")
 	quit(1 if failures else 0)

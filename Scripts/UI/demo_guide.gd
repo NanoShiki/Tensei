@@ -70,7 +70,7 @@ static func stages(expedition: RefCounted = null, guild_level: int = 0) -> Array
 			"captain": item.status = "已交付" if hero.quests.captain == "claimed" else Quests.progress(hero, "captain")
 			"familia": item.status = "未加入" if hero.familia_id.is_empty() else ("共享资格不可用" if guild_level == 0 else "组织等级 %d · 巡守 %s" % [guild_level, {"available": "未接取", "active": Quests.progress(hero, "familia_patrol"), "claimed": "已交付"}[hero.quests.familia_patrol]])
 			"depth": item.status = {"available": "未接取", "active": Quests.progress(hero, "depth_five"), "claimed": "已交付"}[hero.quests.depth_five]
-		if item.id == "familia" and hero.familia_id == "ember": item.status = "当前炉心眷族 · 晨行巡守暂停，转回后继续"
+		if item.id == "familia" and not hero.familia_id.is_empty() and hero.familia_id != "dawn": item.status = "当前" + preload("res://Scripts/Character/familia_library.gd").name_for(hero.familia_id) + " · 晨行巡守暂停，转回后继续"
 	return entries
 
 func _unhandled_key_input(event: InputEvent) -> void:
