@@ -39,6 +39,24 @@ def inspect(paths):
             if row["level"] == "ERROR":
                 errors.append(label + ": " + str(row["data"].get("message", row["data"])))
             data = row["data"]
+            if row["category"] == "training" and row["event"] == "started":
+                try:
+                    config, state = data["config"], data["battle"]
+                    hero = state["hero"]
+                    assert hero["job_id"] == config["job"] and hero["level"] == config["level"] and hero["weapon"] == config["weapon"] and hero["armor"] == config["armor"], "training configuration mismatch"
+                    base_ac = {"swordsman": 14, "mage": 12, "archer": 13, "rogue": 13}[config["job"]]
+                    assert hero["ac"] == base_ac + (1 if config["armor"] == "iron_armor" else 0), "training armor defense"
+                    assert hero["hp"] == hero["max_hp"] == 36 + 4 * (config["level"] - 1), "training initial health"
+                    assert bool(state["ally"]) == (config["party"] >= 2) and bool(state["scout"]) == (config["party"] == 3), "training party mismatch"
+                    expected_kind = "armored" if config["enemy"] == "pair" else config["enemy"]
+                    assert state["enemy"]["content_id"] == expected_kind and bool(state["enemy_b"]) == (config["enemy"] == "pair"), "training encounter mismatch"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
+            if row["category"] == "training" and row["event"] == "finished":
+                try:
+                    assert data["battle"]["hero"]["gold"] == 0 and data["battle"]["hero"]["scrap"] == 0, "training granted expedition loot"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "trade" and row["event"] == "service":
                 try:
                     old, new = data["before"], data["after"]

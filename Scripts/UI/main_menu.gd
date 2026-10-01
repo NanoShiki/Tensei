@@ -235,14 +235,19 @@ func _open_character() -> void:
 	content.add_child(_label("每个角色独立保存，可保留多条进度记录。", 15, Color(PAPER, 0.6)))
 	new_game_requested.emit("lorn")
 	_button("进入城市    →", func(): get_node("/root/GameFlow").start_character(profile_name.text), content)
-	_button("战斗演示    →", _start_battle, content)
+	_button("战斗演练配置    →", _start_battle, content)
 	_button("返回", _close_modal, content).grab_focus()
 
 
 func _start_battle() -> void:
+	for child in get_children():
+		if child is Window and child.visible: return
 	var flow := get_node_or_null("/root/GameFlow")
 	if flow != null:
-		flow.start_battle("lorn")
+		_close_modal()
+		var panel := preload("res://Scripts/UI/training_panel.gd").new()
+		add_child(panel)
+		panel.open(flow)
 
 
 func _open_settings() -> void:
