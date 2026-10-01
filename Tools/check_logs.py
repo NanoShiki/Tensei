@@ -94,7 +94,7 @@ def inspect(paths):
                                 target = "dawn" if data["action"] == "join" else "ember"
                                 old, hero = before["hero"], after["hero"]
                                 assert old["familia_id"] != target and old["hp"] > 0 and not old["growth_pending"] and not old.get("forge_pending", []), "familia transfer prerequisites"
-                                assert old["quests"]["hunt"] == "claimed" if target == "dawn" else old["weapon"] == "iron_sword", "familia qualification"
+                                assert old["quests"]["hunt"] == "claimed" if target == "dawn" else "iron_sword" in old.get("weapons", [old["weapon"]]), "familia qualification"
                                 assert hero["familia_id"] == target and hero["player_id"] == data["shared_after"]["player_id"], "familia owner binding"
                                 expected = json.loads(json.dumps(before))
                                 expected["hero"].update(familia_id=target, player_id=hero["player_id"], party_enlisted=False, party_hp=0, scout_enlisted=False, scout_hp=0)
@@ -135,14 +135,30 @@ def inspect(paths):
                         expected["message"] = new["message"]
                         if data["success"]:
                             hero = old["hero"]
-                            assert old["phase"] == "city" and not old["pending"] and hero["weapon"] != "iron_sword" and hero["gold"] >= 6 and hero["scrap"] >= 3 and not hero.get("forge_pending", []), "forge prerequisites"
+                            recipe = data.get("recipe", "iron_sword")
+                            gold, scrap = {"iron_sword": (6, 3), "tempered_sword": (9, 4)}[recipe]
+                            assert old["phase"] == "city" and not old["pending"] and recipe not in hero.get("weapons", [hero["weapon"]]) and hero["gold"] >= gold and hero["scrap"] >= scrap and not hero.get("forge_pending", []), "forge prerequisites"
+                            if recipe == "tempered_sword":
+                                assert hero["familia_id"] == "ember" and data["ember_level"] >= 1 and "iron_sword" in hero["weapons"], "member recipe qualification"
                             assert not hero["player_id"] or hero["player_id"] == data["player_id"], "forge rebound shared owner"
                             assert new["hero"]["forge_pending"] in ([], [data["id"]]), "forge outbox"
-                            expected["hero"].update(gold=hero["gold"]-6, scrap=hero["scrap"]-3, weapon="iron_sword", player_id=data["player_id"], forge_pending=new["hero"]["forge_pending"])
+                            expected["hero"].update(gold=hero["gold"]-gold, scrap=hero["scrap"]-scrap, weapon=recipe, player_id=data["player_id"], forge_pending=new["hero"]["forge_pending"])
+                            if "weapons" in hero: expected["hero"]["weapons"] = hero["weapons"] + [recipe]
                         assert expected == new, "forge changed unrelated personal progress"
                     if row["event"] == "sync":
                         assert all(event in data["before"] for event in data["after"]), "forge sync invented event"
                         if data["success"]: assert not data["after"], "successful forge sync still pending"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
+            if row["category"] == "inventory" and row["event"] == "equip":
+                try:
+                    old, new = data["before"], data["after"]
+                    expected = json.loads(json.dumps(old))
+                    if data["success"]:
+                        assert old["phase"] == "city" and not old["pending"] and data["id"] in old["hero"]["weapons"] and old["hero"]["weapon"] != data["id"], "equip prerequisites"
+                        expected["hero"]["weapon"] = data["id"]
+                        expected["message"] = new["message"]
+                    assert expected == new, "equip changed unrelated progress"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
             if row["category"] == "inventory" and row["event"] == "field_potion":
@@ -302,8 +318,10 @@ def inspect(paths):
                         assert hero["gold"] == old["gold"] - 3 and hero["potions"] == old["potions"] + 1, "potion transaction"
                     if service == "fire_potion":
                         assert hero["gold"] == old["gold"] - 4 and hero["fire_potions"] == old["fire_potions"] + 1, "fire potion transaction"
-                    if service == "forge":
-                        assert hero["gold"] == old["gold"] - 6 and hero["scrap"] == old["scrap"] - 3 and hero["weapon"] == "iron_sword", "forge transaction"
+                    if service in ("forge", "forge_tempered"):
+                        recipe = "iron_sword" if service == "forge" else "tempered_sword"
+                        gold, scrap = (6, 3) if service == "forge" else (9, 4)
+                        assert hero["gold"] == old["gold"] - gold and hero["scrap"] == old["scrap"] - scrap and hero["weapon"] == recipe, "forge transaction"
                 if action == "depart_city":
                     assert before["hero"] == hero and after["steps"] == 0 and after["run_id"] != before["run_id"], "new expedition continuity"
             except (KeyError, TypeError, AssertionError) as exc:

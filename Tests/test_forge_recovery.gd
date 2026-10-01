@@ -49,6 +49,21 @@ func _run() -> void:
 	check(flow.load_exploration(profile_id, pending_record), "读取旧待同步记录重试去重")
 	await frames()
 	check(flow.run.character.forge_pending.is_empty() and flow.progress.data.familias.ember.contribution == 1 and flow.active_character.forge_pending.is_empty(), "重复恢复不刷贡献且活动角色使用同步后状态")
+	check(flow.familia_service("join_ember"), "同步完成后加入炉心")
+	flow.run.character.gold = 9
+	flow.run.character.scrap = 4
+	DirAccess.make_dir_absolute(flow.progress.base_path + ".tmp")
+	check(flow.city_service("forge_tempered") and flow.run.character.forge_pending.size() == 1 and flow.run.character.weapons.has("tempered_sword"), "会员配方写入失败保留制作成果和对应配方事件")
+	check(flow.equip_weapon("training_sword") and Run.from_save(flow.run.save_data()) != null, "待同步时可装备旧武器，成品持有与事件仍匹配")
+	var tempered_record: String = flow.saves.save_record(flow.run, flow.profile, "淬火待同步")
+	check(flow.load_exploration(profile_id, tempered_record), "会员配方待同步事件磁盘恢复")
+	await frames()
+	check(flow.run.character.forge_pending[0].ends_with("tempered_sword") and flow.run.character.weapon == "training_sword", "旧装备与新配方待提交分别保存")
+	DirAccess.remove_absolute(flow.progress.base_path + ".tmp")
+	check(flow.retry_growth() and flow.progress.data.familias.ember.contribution == 2, "重试会员配方只增加一次专业贡献")
+	check(flow.load_exploration(profile_id, tempered_record), "旧会员待同步记录重复读取")
+	await frames()
+	check(flow.progress.data.familias.ember.contribution == 2 and flow.run.character.forge_pending.is_empty(), "两种配方独立去重，旧事件不重奖")
 	var wrong: Dictionary = flow.run.save_data()
 	wrong.character.forge_pending = [flow.progress.forge_event("01234567890123456789012345678901")]
 	var foreign_run = Run.from_save(wrong)
@@ -73,6 +88,7 @@ func _run() -> void:
 	before = flow.run.log_state()
 	check(not flow.load_exploration(profile_id, pending_record) and flow.run.log_state() == before, "已绑定的未加入角色缺共享时拒绝读档")
 	flow.run.character.weapon = "training_sword"
+	flow.run.character.weapons = ["training_sword"]
 	flow.run.character.gold = 6
 	flow.run.character.scrap = 3
 	hero = flow.run.character.duplicate(true)

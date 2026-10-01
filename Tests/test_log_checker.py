@@ -8,6 +8,22 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_equipment_switch_preserves_resources_and_clock(self):
+        old = {"phase": "city", "pending": "", "steps": 7, "respawn": {"a": 2}, "message": "old",
+            "hero": {"weapon": "iron_sword", "weapons": ["training_sword", "iron_sword"], "gold": 6}}
+        new = json.loads(json.dumps(old))
+        new["hero"]["weapon"] = "training_sword"
+        new["message"] = "equipped"
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "inventory", "event": "equip",
+            "data": {"id": "training_sword", "success": True, "before": old, "after": new}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            new["hero"]["gold"] = 0
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("equip changed unrelated progress", inspect([path])[1][0])
+
     def test_forge_contribution_changes_only_service_provider(self):
         old = {"player_id": "test", "familias": {"dawn": {"contribution": 3, "squire_xp": 6}, "ember": {"contribution": 0, "events": {}}}}
         new = json.loads(json.dumps(old))
