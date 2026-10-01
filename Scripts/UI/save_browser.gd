@@ -13,6 +13,8 @@ var rows: VBoxContainer
 var heading: Label
 var feedback: Label
 var name_input: LineEdit
+var continue_save_button: Button
+var exit_after_save := true
 var save_button: Button
 var back_button: Button
 var list_buttons: Array[Button] = []
@@ -58,7 +60,12 @@ func open(store: RefCounted, character: Dictionary = {}, expedition: RefCounted 
 		name_input.text = "城市整备" if run.phase == "city" else "第 %d 层 · %d 步" % [run.floor_number, run.steps_taken]
 		name_input.text_changed.connect(func(_text): _update_save_button())
 		content.add_child(name_input)
-		save_button = _button("新增记录并退出", _request_save, content)
+		var actions := HBoxContainer.new()
+		content.add_child(actions)
+		continue_save_button = _button("新增记录并继续", _request_save.bind(false), actions)
+		continue_save_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		save_button = _button("新增记录并退出", _request_save, actions)
+		save_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	back_button = _button("返回角色列表", _show_profiles, content)
 	_button("取消", queue_free, content)
 	if run == null: _show_profiles()
@@ -168,23 +175,25 @@ func _delete_confirmed(profile_id: String, record_id: String) -> void:
 
 func _update_save_button() -> void:
 	save_button.text = "新增记录并退出" if selected_id.is_empty() else "覆盖所选记录并退出"
+	continue_save_button.text = "新增记录并继续" if selected_id.is_empty() else "覆盖所选记录并继续"
 	save_button.disabled = name_input.text.strip_edges().is_empty() or _committing
+	continue_save_button.disabled = save_button.disabled
 
-func _request_save() -> void:
+func _request_save(leave: bool = true) -> void:
 	if _committing or name_input.text.strip_edges().is_empty(): return
 	if selected_id.is_empty():
-		_commit()
+		_commit(leave)
 		return
 	var confirmation := ConfirmationDialog.new()
 	confirmation.title = "覆盖存档记录？"
 	confirmation.dialog_text = "角色：%s\n原记录：%s\n保存名称：%s\n只替换所选记录，其他记录保留。" % [profile.name, selected_name, name_input.text]
-	confirmation.confirmed.connect(_commit)
+	confirmation.confirmed.connect(_commit.bind(leave))
 	confirmation.confirmed.connect(confirmation.queue_free)
 	confirmation.canceled.connect(confirmation.queue_free)
 	add_child(confirmation)
 	confirmation.popup_centered()
 
-func _commit() -> void:
+func _commit(leave: bool = true) -> void:
 	if _committing: return
 	_committing = true
 	_update_save_button()
@@ -194,6 +203,7 @@ func _commit() -> void:
 		_committing = false
 		_update_save_button()
 		return
+	exit_after_save = leave
 	saved.emit(record_id)
 	queue_free()
 

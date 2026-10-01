@@ -23,6 +23,7 @@ LOG_SCENARIOS.add("test_pause_menu")
 LOG_SCENARIOS.add("test_bulk_trading")
 LOG_SCENARIOS.add("test_armor_equipment")
 LOG_SCENARIOS.add("test_training_setup")
+LOG_SCENARIOS.add("test_save_and_continue")
 
 
 def classify(returncode, output, require_completion=True):

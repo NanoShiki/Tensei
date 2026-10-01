@@ -432,7 +432,7 @@ func show_floor_map() -> void:
 	_label("第 %02d / %02d 层" % [run.floor_number, run.total_floors], Rect2(500, 20, 210, 40), 25)
 	_button("背包 · B", Rect2(720, 22, 135, 40), _open_inventory)
 	_button("放弃并回主菜单", Rect2(1060, 22, 190, 40), _return_to_menu)
-	_button("保存并退出", Rect2(870, 22, 175, 40), _request_save_exit)
+	_button("保存记录", Rect2(870, 22, 175, 40), _request_save_exit)
 	var returning: bool = run.phase == "returning"
 	var destination: Dictionary = run.return_target()
 	var return_keys: Array = []
@@ -510,11 +510,18 @@ func _begin_return() -> void:
 	if flow.run.begin_return(): show_floor_map()
 
 func _request_save_exit() -> void:
+	if flow == null or flow.run == null or flow.run.save_data().is_empty() or get_tree().paused: return
+	for child in get_children():
+		if child is Window and child.visible: return
 	var browser := preload("res://Scripts/UI/save_browser.gd").new()
 	add_child(browser)
 	browser.saved.connect(func(record_id: String):
 		flow.active_record_id = record_id
-		flow.return_to_menu())
+		flow.active_character = flow.run.character.duplicate(true)
+		preload("res://Scripts/Core/game_log.gd").context["record_id"] = record_id
+		preload("res://Scripts/Core/game_log.gd").event("flow", "saved_location", {"exit": browser.exit_after_save, "record_id": record_id, "run": flow.run.log_state()})
+		if browser.exit_after_save: flow.return_to_menu()
+		else: show_floor_map())
 	browser.open(flow.saves, flow.profile, flow.run)
 
 func _begin_descent() -> void:
@@ -550,7 +557,7 @@ func _show_city() -> void:
 	city_buttons["familia"] = _button("眷族／编队", Rect2(420, 22, 135, 40), _open_familia)
 	city_buttons["quests"] = _button("委托", Rect2(570, 22, 135, 40), _open_quests)
 	_button("背包 · B", Rect2(720, 22, 135, 40), _open_inventory)
-	_button("保存并退出", Rect2(870, 22, 175, 40), _request_save_exit)
+	_button("保存记录", Rect2(870, 22, 175, 40), _request_save_exit)
 	_button("主菜单（未保存）", Rect2(1060, 22, 190, 40), _return_to_menu)
 	_panel(Rect2(30, 112, 410, 402))
 	_label(_party_status(), Rect2(52, 455, 370, 45), 16, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
