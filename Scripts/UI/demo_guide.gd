@@ -55,10 +55,12 @@ static func stages(expedition: RefCounted = null, guild_level: int = 0) -> Array
 	var entries := [
 		{"id": "prepare", "title": "1. 城市准备", "text": "城市点“委托”，接取初次讨伐、工坊供货和守关队长讨伐。职业菜单可免费试选四职业。旅店免费恢复全队，准备后从第一层出发。"},
 		{"id": "growth", "title": "2. 首趟收获", "text": "赢三场后选“向上返回”，沿高亮分支回到第一层入口，再进入城市。交付讨伐和三铁片，累计 25 经验到等级 3；升级保持当前生命，旅店可补满。"},
-		{"id": "equipment", "title": "3. 打造与补给（可选）", "text": "铁剑需要 6 金币、3 铁片，物理伤害 +2。城市“工坊／装备”查看配方和选择持有武器；加入炉心后可用 9 金币、4 铁片制作淬火铁剑（+3），转会保留。供货也消耗铁片，可分趟收集。治疗 3 金币、灼烧 4 金币；一瓶灼烧可掩护绕行，不给战利品。"},
-		{"id": "captain", "title": "4. 第三层队长", "text": "第三层 1a 是守关队长。看清蓄力／重击意图，使用闪避、恢复与技能。胜利后自由返程交付；三条入门任务合计 50 经验、等级 4。"},
+		{"id": "equipment", "title": "3. 打造与补给（可选）", "text": "铁剑需要 6 金币、3 铁片，物理伤害 +2。城市“工坊／装备”查看配方并分别选择武器、护甲；铁甲 6 金币、3 铁片，防御 AC +1，保留布衣，切职业保留护甲；加入炉心后可用 9 金币、4 铁片制作淬火铁剑（+3），转会保留。供货也消耗铁片，可分趟收集。治疗 3 金币、灼烧 4 金币；一瓶灼烧可掩护绕行，不给战利品。"},
+		{"id": "captain", "title": "4. 第三层队长", "text": "第三层 1a 是守关队长。看清蓄力／重击意图，使用闪避、恢复与技能。胜利后自由返程交付；三条入门任务合计 50 经验、等级 4。第四层首个节点为双敌：每名敌人独立行动，清除全部后只按一个节点结算。"},
 		{"id": "familia", "title": "5. 眷族与成员", "text": "交付初次讨伐后，城市“眷族／编队”加入晨行、招募卫士。编队三胜升组织等级 2，可招募游侠并接取成员巡守；接取后编队五胜回城领奖。每位成员有自己的回合，只给实际参战队友共享经验。"},
 		{"id": "depth", "title": "6. 第五层勘察", "text": "交付队长委托后，在城市接取勘察，再次抵达第五层。入口休整站可付费恢复存活成员（各至多12），购买较贵途中药水；服务不推进刷新，倒下成员需回城。可途中保存再继续，达成后回城交付。五条任务全部交付累计 85 经验、等级 5、生命上限 52。"},
+		{"id": "commerce", "title": "7. 城市服务与归属（可选）", "text": "工坊实际制作贡献计给炉心，每角色每配方只计一次；个人装备转会保留。订单／补给里用 2 铁片交付供货订单，得 5 金币和一次集市贡献；由此可加入集市，会员礼包 6 金币换 3 治疗药水。批量补给可选 1–99，治疗每瓶 3、灼烧 4，铁片可按每片 1 金币出售，普通交易不计组织贡献。晨行负责远征队友，炉心提供淬火配方，集市提供成员订单；待同步先保存，再到眷族重试。"},
+		{"id": "practice", "title": "8. 演练、暂停与保存", "text": "主菜单开始旅程里可打开独立演练配置，选择四职业、等级、武器、护甲、单／双敌、1–3 人、楼层和种子。相同选择和行动可重现骰子；胜利再试一次保持配置，不写原角色存档或共享成长。局内暂停冻结反馈，音量／全屏即时保存。地图和城市保存记录时可选择继续原地游玩或退出，覆盖先确认；读旧个人时点恢复旧材料和任务，共享组织成长按最新去重记录。"},
 	]
 	for item in entries:
 		item.status = "流程说明"
@@ -66,9 +68,11 @@ static func stages(expedition: RefCounted = null, guild_level: int = 0) -> Array
 		match item.id:
 			"prepare": item.status = "已接取" if ["hunt", "materials", "captain"].all(func(id: String): return hero.quests[id] != "available") else "城市委托中接取"
 			"growth": item.status = "已交付" if hero.quests.hunt == "claimed" and hero.quests.materials == "claimed" else "讨伐：%s；供货：%s" % [Quests.progress(hero, "hunt"), Quests.progress(hero, "materials")]
-			"equipment": item.status = "当前装备：" + preload("res://Scripts/Character/character_library.gd").weapon_name(hero) if hero.weapons.has("iron_sword") else "持有 %d 金币、%d 铁片" % [hero.gold, hero.scrap]
+			"equipment": item.status = "%s／%s · AC %d；%d 金币、%d 铁片" % [preload("res://Scripts/Character/character_library.gd").weapon_name(hero), preload("res://Scripts/Character/character_library.gd").armor_name(hero), hero.ac, hero.gold, hero.scrap]
 			"captain": item.status = "已交付" if hero.quests.captain == "claimed" else Quests.progress(hero, "captain")
 			"familia": item.status = "未加入" if hero.familia_id.is_empty() else ("共享资格不可用" if guild_level == 0 else "组织等级 %d · 巡守 %s" % [guild_level, {"available": "未接取", "active": Quests.progress(hero, "familia_patrol"), "claimed": "已交付"}[hero.quests.familia_patrol]])
+			"commerce": item.status = ("供货已交付" if hero.commerce_done.has("supply_order") else "供货未交付") + " · 专业贡献待同步 %d" % (hero.forge_pending.size() + hero.commerce_pending.size())
+			"practice": item.status = "手动记录保留当前时点；演练独立"
 			"depth": item.status = {"available": "未接取", "active": Quests.progress(hero, "depth_five"), "claimed": "已交付"}[hero.quests.depth_five]
 		if item.id == "familia" and not hero.familia_id.is_empty() and hero.familia_id != "dawn": item.status = "当前" + preload("res://Scripts/Character/familia_library.gd").name_for(hero.familia_id) + " · 晨行巡守暂停，转回后继续"
 	return entries
