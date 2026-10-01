@@ -4,6 +4,7 @@ const Log = preload("res://Scripts/Core/game_log.gd")
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 const FloorRun = preload("res://Scripts/Exploration/floor_run.gd")
 const Familias = preload("res://Scripts/Character/familia_library.gd")
+const Weapons = preload("res://Scripts/Character/weapon_library.gd")
 const MENU_SCENE := "res://Scenes/UI/main_menu.tscn"
 const BATTLE_SCENE := "res://Scenes/Battle/battle.tscn"
 var active_character: Dictionary = {}
@@ -30,7 +31,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 		Log.event("flow", "load_rejected", {"profile_id": profile_id, "record_id": record_id, "reason": saves.message}, "WARN")
 		return false
 	for event in candidate.forge_pending:
-		if event != progress.forge_event(profile_id):
+		if event != progress.forge_event(profile_id, event.get_slice("/", 3)):
 			saves.message = "无法读取：锻造贡献不属于此角色档案。"
 			Log.event("flow", "load_rejected", {"profile_id": profile_id, "record_id": record_id, "reason": saves.message}, "WARN")
 			return false
@@ -49,7 +50,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-workshop-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-equipment-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -174,7 +175,7 @@ func retry_forge() -> bool:
 	if run == null or run.character.forge_pending.is_empty(): return true
 	var before: Array = run.character.forge_pending.duplicate()
 	for event in before:
-		if event != progress.forge_event(profile.get("id", "")):
+		if event != progress.forge_event(profile.get("id", ""), event.get_slice("/", 3)):
 			progress.message = "锻造贡献不属于当前角色档案。"
 			break
 		if not progress.award_forge(event, run.character.player_id): break
@@ -210,32 +211,42 @@ func quest_service(id: String, action: String) -> bool:
 
 func city_service(action: String) -> bool:
 	if run == null: return false
-	if action == "forge": return _forge_service()
+	if action in ["forge", "forge_tempered"]: return _forge_service("iron_sword" if action == "forge" else "tempered_sword")
 	var member := party_companion()
 	var scout := party_companion("scout")
 	return run != null and run.city_service(action, member.get("max_hp", 0), scout.get("max_hp", 0))
 
-func _forge_service() -> bool:
+func forge_reason(recipe_id: String = "iron_sword") -> String:
+	if run == null or run.phase != "city" or not run.pending.is_empty(): return "请在城市工坊制作。"
+	if not run.character.forge_pending.is_empty(): return "请先同步待提交锻造贡献。"
+	return Weapons.reason(run.character, recipe_id, guild_level() if recipe_id == "tempered_sword" else 0)
+
+func equip_weapon(id: String) -> bool:
+	if run == null: return false
+	var success: bool = run.equip_weapon(id)
+	if success: active_character = run.character.duplicate(true)
+	return success
+
+func _forge_service(recipe_id: String) -> bool:
 	var before: Dictionary = run.log_state()
 	var success := false
-	var event_id: String = progress.forge_event(profile.get("id", ""))
+	var event_id: String = progress.forge_event(profile.get("id", ""), recipe_id)
 	var hero: Dictionary = run.character
-	if run.phase != "city" or not run.pending.is_empty() or hero.weapon == "iron_sword" or hero.gold < 6 or hero.scrap < 3:
-		run.message = "请在城市准备 6 金币、3 铁片；铁剑已装备时不能重复打造。"
-	elif not progress.valid_forge_event(event_id) or not hero.forge_pending.is_empty():
-		run.message = "角色身份无效或有待同步锻造贡献，请先同步。"
+	var reason := forge_reason(recipe_id)
+	if not reason.is_empty(): run.message = reason
+	elif not progress.valid_forge_event(event_id): run.message = "角色身份无效。"
 	elif hero.player_id.is_empty() and not progress.ensure(): run.message = progress.message
 	elif not hero.player_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != hero.player_id):
 		run.message = "共享档案不可用或归属不符，请恢复备份后打造。" + progress.message
 	else:
-		if run.city_service("forge"):
+		if run.city_service("forge" if recipe_id == "iron_sword" else "forge_tempered", 0, 0, progress.guild_level("ember")):
 			hero.player_id = progress.data.player_id
 			hero.forge_pending.append(event_id)
 			success = true
 			if retry_forge(): run.message += " 炉心贡献已同步（同角色同配方只计一次）。"
 			else: run.message += " 炉心贡献待同步，请保存当前记录；恢复存储后重试。"
 			active_character = hero.duplicate(true)
-	Log.event("workshop", "craft", {"id": event_id, "success": success, "reason": run.message, "before": before, "after": run.log_state(), "player_id": progress.data.get("player_id", "")}, "INFO" if success else "WARN")
+	Log.event("workshop", "craft", {"id": event_id, "recipe": recipe_id, "ember_level": progress.guild_level("ember") if not progress.data.is_empty() else 0, "success": success, "reason": run.message, "before": before, "after": run.log_state(), "player_id": progress.data.get("player_id", "")}, "INFO" if success else "WARN")
 	return success
 
 func guild_level() -> int:

@@ -534,8 +534,9 @@ func _show_city() -> void:
 	city_buttons["potion"].disabled = hero.gold < 3
 	city_buttons["fire_potion"] = _button("购买灼烧药水 ×1 · 4 金币（战斗／绕行）", Rect2(496, 308, 720, 46), _city_service.bind("fire_potion"))
 	city_buttons["fire_potion"].disabled = hero.gold < 4
-	city_buttons["forge"] = _button("铁剑已装备" if hero.weapon == "iron_sword" else "打造并装备铁剑 · 6 金币 + 3 铁片", Rect2(496, 366, 720, 46), _city_service.bind("forge"), true)
-	city_buttons["forge"].disabled = hero.weapon == "iron_sword" or hero.gold < 6 or hero.scrap < 3
+	city_buttons["forge"] = _button("已持有铁剑" if hero.weapons.has("iron_sword") else "打造铁剑 · 6 金币 + 3 铁片", Rect2(496, 366, 458, 46), _city_service.bind("forge"), true)
+	city_buttons["forge"].disabled = not flow.forge_reason().is_empty()
+	city_buttons["equipment"] = _button("工坊／装备", Rect2(966, 366, 250, 46), _open_equipment)
 	_label("铁剑：物理伤害 +2。\n" + flow.workshop_status(), Rect2(496, 427, 716, 77), 16, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label(flow.run.message, Rect2(42, 541, 1180, 60), 20).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	city_buttons["depart"] = _button("准备完毕 · 从第一层出发", Rect2(420, 620, 440, 58), _depart_city, true)
@@ -543,6 +544,15 @@ func _show_city() -> void:
 func _city_service(action: String) -> void:
 	flow.city_service(action)
 	show_floor_map()
+
+func _open_equipment() -> void:
+	if flow == null or flow.run == null or flow.run.phase != "city": return
+	for child in get_children():
+		if child is Window and child.visible: return
+	var panel := preload("res://Scripts/UI/equipment_panel.gd").new()
+	add_child(panel)
+	panel.changed.connect(show_floor_map)
+	panel.open(flow)
 
 func _depart_city() -> void:
 	if flow.run.depart_city(randi()): show_floor_map()

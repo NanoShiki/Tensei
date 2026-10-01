@@ -81,8 +81,8 @@ func _refresh() -> void:
 			var scout: Dictionary = flow.progress.companion("scout")
 			_text("见习游侠 · 弓箭手 · 等级 %d · 经验 %d\n生命上限 %d · 命中 +5 · 防御 12 · 敏捷 +3\n等级 2 开放瞄准射击；晨行眷族等级 2 可招募。\n当前：%s" % [scout.level, scout.experience, scout.max_hp, "已编队 · 生命 %d/%d" % [hero.scout_hp, scout.max_hp] if hero.scout_enlisted else "未编队"])
 		_button("dismiss_scout" if hero.scout_enlisted else "enlist_scout", "让游侠留在城市" if hero.scout_enlisted else "招募见习游侠 · 免费 · 眷族等级 2", not available or (not hero.scout_enlisted and flow.progress.guild_level() < 2))
-	_text("炉心眷族 · 锻造与工艺\n加入资格：打造并装备铁剑。当前：" + ("已达成" if hero.weapon == "iron_sword" else "未达成") + "\n" + flow.workshop_status() + "\n会员配方待后续接入；当前不提供远征队友。")
-	_button("join_ember", "已加入炉心眷族" if hero.familia_id == "ember" else ("加入炉心眷族" if hero.familia_id.is_empty() else "转入炉心眷族 · 免费"), hero.familia_id == "ember" or hero.weapon != "iron_sword")
+	_text("炉心眷族 · 锻造与工艺\n加入资格：打造并持有铁剑。当前：" + ("已达成" if Familias.qualified(hero, "ember") else "未达成") + "\n" + flow.workshop_status() + "\n会员可制作淬火铁剑；当前不提供远征队友。")
+	_button("join_ember", "已加入炉心眷族" if hero.familia_id == "ember" else ("加入炉心眷族" if hero.familia_id.is_empty() else "转入炉心眷族 · 免费"), hero.familia_id == "ember" or not Familias.qualified(hero, "ember"))
 	if hero.familia_id == "ember":
 		var level: int = flow.guild_level()
 		_text("炉心等级 %d · 贡献 %d\n晨行成员巡守暂停推进和交付，转回晨行后从原进度继续。" % [level, flow.progress.data.get("familias", {}).get("ember", {}).get("contribution", 0)] if level > 0 else "炉心共享档案不可用，请恢复同一玩家备份。")

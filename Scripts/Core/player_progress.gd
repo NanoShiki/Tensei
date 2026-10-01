@@ -170,13 +170,13 @@ func companion(id: String = "squire") -> Dictionary:
 	var hp: int = member.base_hp + HP_PER_LEVEL * (level - 1)
 	return {"id": id, "name": member.name, "hp": hp, "max_hp": hp, "ac": member.ac, "attack": member.attack, "dex": member.dex, "job_id": member.job_id, "surge": 1, "weapon": "training_sword", "level": level, "experience": xp}
 
-static func forge_event(profile_id: String) -> String:
-	return "profile/" + profile_id + "/forge/iron_sword"
+static func forge_event(profile_id: String, recipe: String = "iron_sword") -> String:
+	return "profile/" + profile_id + "/forge/" + recipe
 
 static func valid_forge_event(event_id: Variant) -> bool:
 	if not event_id is String: return false
 	var parts: PackedStringArray = event_id.split("/")
-	return parts.size() == 4 and parts[0] == "profile" and (parts[1] == "legacy" or (parts[1].length() == 32 and parts[1].is_valid_hex_number(false))) and parts[2] == "forge" and parts[3] == "iron_sword"
+	return parts.size() == 4 and parts[0] == "profile" and (parts[1] == "legacy" or (parts[1].length() == 32 and parts[1].is_valid_hex_number(false))) and parts[2] == "forge" and parts[3] in ["iron_sword", "tempered_sword"]
 
 func award_forge(event_id: String, player_id: String) -> bool:
 	var previous := inspect()

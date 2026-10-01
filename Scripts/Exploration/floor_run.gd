@@ -7,6 +7,7 @@ const Jobs = preload("res://Scripts/Character/job_library.gd")
 const PlayerProgress = preload("res://Scripts/Core/player_progress.gd")
 const Enemies = preload("res://Scripts/Battle/enemy_library.gd")
 const Familias = preload("res://Scripts/Character/familia_library.gd")
+const Weapons = preload("res://Scripts/Character/weapon_library.gd")
 var floor_number := 1
 var total_floors := 30
 var seed_value := 1
@@ -333,14 +334,14 @@ func _enter_city() -> bool:
 	message = "已回到城市。战利品随身保留，可休整、补给或打造铁剑。"
 	return true
 
-func city_service(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0) -> bool:
+func city_service(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0, ember_level: int = 0) -> bool:
 	var before := log_state()
-	var result := _city_service(action, companion_max_hp, scout_max_hp)
+	var result := _city_service(action, companion_max_hp, scout_max_hp, ember_level)
 	Log.context["run_id"] = run_id
-	Log.event("exploration", "city_service", {"input": {"action": action, "companion_max_hp": companion_max_hp, "scout_max_hp": scout_max_hp}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
+	Log.event("exploration", "city_service", {"input": {"action": action, "companion_max_hp": companion_max_hp, "scout_max_hp": scout_max_hp, "ember_level": ember_level}, "success": result, "before": before, "after": log_state()}, "INFO" if result else "WARN")
 	return result
 
-func _city_service(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0) -> bool:
+func _city_service(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0, ember_level: int = 0) -> bool:
 	if phase != "city": return false
 	match action:
 		"rest":
@@ -362,14 +363,29 @@ func _city_service(action: String, companion_max_hp: int = 0, scout_max_hp: int 
 			character.gold -= 4
 			character.fire_potions += 1
 			message = "花费 4 金币，购入 1 瓶灼烧药水，可战斗或掩护绕行。"
-		"forge":
-			if character.gold < 6 or character.scrap < 3 or character.weapon == "iron_sword": return false
-			character.gold -= 6
-			character.scrap -= 3
-			character.weapon = "iron_sword"
-			message = "花费 6 金币、3 铁片，打造并装备铁剑。剑击与强攻伤害 +2。"
+		"forge", "forge_tempered":
+			var recipe_id := "iron_sword" if action == "forge" else "tempered_sword"
+			var reason := Weapons.reason(character, recipe_id, ember_level)
+			if not reason.is_empty():
+				message = reason
+				return false
+			var recipe: Dictionary = Weapons.ENTRIES[recipe_id]
+			character.gold -= recipe.gold
+			character.scrap -= recipe.scrap
+			character.weapons.append(recipe_id)
+			character.weapon = recipe_id
+			message = "花费 %d 金币、%d 铁片，打造并装备%s。物理伤害 +%d。" % [recipe.gold, recipe.scrap, recipe.name, recipe.bonus]
 		_: return false
 	return true
+
+func equip_weapon(id: String) -> bool:
+	var before := log_state()
+	var success: bool = phase == "city" and pending.is_empty() and Weapons.ENTRIES.has(id) and character.weapons.has(id) and character.weapon != id
+	if success:
+		character.weapon = id
+		message = "已装备%s，物理伤害 +%d；装备选择请手动保存。" % [Weapons.ENTRIES[id].name, Weapons.ENTRIES[id].bonus]
+	Log.event("inventory", "equip", {"id": id, "success": success, "before": before, "after": log_state()}, "INFO" if success else "WARN")
+	return success
 
 func depart_city(next_seed: int) -> bool:
 	var before := log_state()
@@ -411,6 +427,9 @@ static func from_save(data: Variant) -> RefCounted:
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
 	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "forge_pending", "job_id", "familia_wins", "scout_enlisted", "scout_hp", "depth_goal"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
+	if not data.character.has("weapons"):
+		data.character.weapons = ["training_sword"]
+		if data.character.weapon != "training_sword": data.character.weapons.append(data.character.weapon)
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
 		if not data.character.has(key) or typeof(data.character[key]) != typeof(hero[key]): return null
@@ -436,9 +455,11 @@ static func from_save(data: Variant) -> RefCounted:
 	if not owner.is_empty():
 		if owner.length() != 32 or not owner.is_valid_hex_number(false): return null
 	elif not data.character.familia_id.is_empty() or not data.character.forge_pending.is_empty(): return null
-	if data.character.forge_pending.size() > 1: return null
+	if data.character.forge_pending.size() > 2: return null
+	var forge_ids := {}
 	for event in data.character.forge_pending:
-		if not PlayerProgress.valid_forge_event(event) or data.character.weapon != "iron_sword": return null
+		if not PlayerProgress.valid_forge_event(event) or forge_ids.has(event) or not data.character.weapons.has(event.get_slice("/", 3)): return null
+		forge_ids[event] = true
 	if data.character.party_hp < 0 or data.character.party_hp > PlayerProgress.MAX_HP or (not data.character.party_enlisted and data.character.party_hp != 0): return null
 	if data.character.scout_hp < 0 or data.character.scout_hp > PlayerProgress.max_hp_for("scout") or (not data.character.scout_enlisted and data.character.scout_hp != 0): return null
 	if data.character.hp == 0 and (not data.character.party_enlisted or data.character.party_hp == 0) and (not data.character.scout_enlisted or data.character.scout_hp == 0): return null
@@ -452,7 +473,13 @@ static func from_save(data: Variant) -> RefCounted:
 		pending_ids[event.id] = true
 		data.character.growth_pending[index] = event
 	if data.character.potions < 0 or data.character.fire_potions < 0: return null
-	if data.character.gold < 0 or data.character.scrap < 0 or data.character.weapon not in ["training_sword", "iron_sword"]: return null
+	if data.character.gold < 0 or data.character.scrap < 0 or not Weapons.ENTRIES.has(data.character.weapon): return null
+	if data.character.weapons.is_empty() or data.character.weapons.size() > Weapons.ENTRIES.size() or not data.character.weapons.has("training_sword") or not data.character.weapons.has(data.character.weapon): return null
+	var owned_ids := {}
+	for weapon in data.character.weapons:
+		if not weapon is String or not Weapons.ENTRIES.has(weapon) or owned_ids.has(weapon): return null
+		owned_ids[weapon] = true
+	if owned_ids.has("tempered_sword") and not owned_ids.has("iron_sword"): return null
 	if data.character.experience < 0 or data.character.experience > 1000000 or data.character.level != CharacterLibrary.level_for(data.character.experience): return null
 	if data.character.max_hp != 36 + 4 * (data.character.level - 1): return null
 	if data.character.hunt_wins < 0 or data.character.hunt_wins > 3 or data.character.quests.size() != Quests.DEFINITIONS.size(): return null
