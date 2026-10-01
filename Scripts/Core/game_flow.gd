@@ -3,6 +3,7 @@ const Log = preload("res://Scripts/Core/game_log.gd")
 
 const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 const FloorRun = preload("res://Scripts/Exploration/floor_run.gd")
+const Familias = preload("res://Scripts/Character/familia_library.gd")
 const MENU_SCENE := "res://Scenes/UI/main_menu.tscn"
 const BATTLE_SCENE := "res://Scenes/Battle/battle.tscn"
 var active_character: Dictionary = {}
@@ -24,7 +25,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	var saved: Dictionary = saves.read_record(profile_id, record_id)
 	if saved.is_empty(): return false
 	var candidate: Dictionary = saved.run.character
-	if candidate.familia_id == "dawn" and (not progress.refresh() or progress.data.get("player_id") != candidate.player_id):
+	if not candidate.familia_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != candidate.player_id):
 		saves.message = "无法读取：共享眷族档案缺失、损坏或归属不符。请恢复同一玩家的共享备份。" + progress.message
 		Log.event("flow", "load_rejected", {"profile_id": profile_id, "record_id": record_id, "reason": saves.message}, "WARN")
 		return false
@@ -43,7 +44,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-depth-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-factions-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -81,7 +82,7 @@ func return_to_menu() -> void:
 
 func party_companion(id: String = "squire") -> Dictionary:
 	var prefix := "party" if id == "squire" else "scout"
-	if id not in ["squire", "scout"] or run == null or not run.character[prefix + "_enlisted"] or progress.data.get("player_id") != run.character.player_id: return {}
+	if id not in ["squire", "scout"] or run == null or run.character.familia_id != "dawn" or not run.character[prefix + "_enlisted"] or progress.data.get("player_id") != run.character.player_id: return {}
 	var member: Dictionary = progress.companion(id)
 	member.hp = mini(run.character[prefix + "_hp"], member.max_hp)
 	return member
@@ -94,17 +95,15 @@ func familia_service(action: String) -> bool:
 	var success := false
 	familia_message = ""
 	if run.phase != "city" or not run.pending.is_empty(): familia_message = "请在城市整备时调整编队。"
-	elif action == "join":
-		if not hero.familia_id.is_empty(): familia_message = "已加入眷族。"
-		elif hero.quests.hunt != "claimed": familia_message = "先交付初次讨伐委托，获得加入资格。"
-		elif not progress.ensure(): familia_message = progress.message
-		else:
-			hero.familia_id = "dawn"
-			hero.player_id = progress.data.player_id
-			success = true
-			familia_message = "已加入晨行眷族。可以招募见习卫士。"
-	elif hero.familia_id != "dawn" or not progress.refresh() or progress.data.get("player_id") != hero.player_id:
+	elif action in ["join", "join_ember"]:
+		success = _join_familia("dawn" if action == "join" else "ember")
+	elif hero.familia_id.is_empty() or not progress.refresh() or progress.data.get("player_id") != hero.player_id:
 		familia_message = "共享档案不可用或归属不符，请恢复备份。" + progress.message
+	elif action == "retry":
+		success = retry_growth()
+		familia_message = "成长记录已同步。" if success else progress.message
+	elif hero.familia_id != "dawn":
+		familia_message = "当前眷族不提供晨行远征队友，请先转回晨行。"
 	elif action == "enlist" and not hero.party_enlisted:
 		hero.party_enlisted = true
 		hero.party_hp = progress.companion().max_hp
@@ -127,13 +126,30 @@ func familia_service(action: String) -> bool:
 		hero.scout_hp = 0
 		success = true
 		familia_message = "游侠已留在城市，共享成长保留。"
-	elif action == "retry":
-		success = retry_growth()
-		familia_message = "成长记录已同步。" if success else progress.message
 	else: familia_message = "当前操作条件不满足。"
 	Log.context["run_id"] = run.run_id
 	Log.event("familia", "service", {"action": action, "success": success, "reason": familia_message, "before": before, "after": run.log_state(), "shared_before": shared_before, "shared_after": progress.data.duplicate(true)}, "INFO" if success else "WARN")
 	return success
+
+func _join_familia(target: String) -> bool:
+	var hero: Dictionary = run.character
+	if hero.familia_id == target: familia_message = "已加入此眷族。"
+	elif not Familias.qualified(hero, target): familia_message = "加入资格：" + str(Familias.ENTRIES[target].qualification) + "。"
+	elif hero.hp <= 0: familia_message = "请先在旅店恢复主角，再调整眷族归属。"
+	elif not hero.growth_pending.is_empty(): familia_message = "请先同步待提交成长，再转会。"
+	elif hero.familia_id.is_empty() and not progress.ensure(): familia_message = progress.message
+	elif not hero.familia_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != hero.player_id): familia_message = "共享档案不可用或归属不符，请恢复备份。"
+	else:
+		hero.familia_id = target
+		hero.player_id = progress.data.player_id
+		hero.party_enlisted = false
+		hero.party_hp = 0
+		hero.scout_enlisted = false
+		hero.scout_hp = 0
+		active_character = hero.duplicate(true)
+		familia_message = "已加入%s。旧组织成长保留，晨行队友留在城市；Demo 免费转会。请手动保存。" % Familias.name_for(target)
+		return true
+	return false
 
 func retry_growth() -> bool:
 	if run == null or run.character.growth_pending.is_empty(): return true
@@ -176,8 +192,8 @@ func city_service(action: String) -> bool:
 	return run != null and run.city_service(action, member.get("max_hp", 0), scout.get("max_hp", 0))
 
 func guild_level() -> int:
-	if run == null or run.character.familia_id != "dawn" or not progress.refresh() or progress.data.get("player_id") != run.character.player_id: return 0
-	return progress.guild_level()
+	if run == null or run.character.familia_id.is_empty() or not progress.refresh() or progress.data.get("player_id") != run.character.player_id: return 0
+	return progress.guild_level(run.character.familia_id)
 
 func _change_scene(path: String) -> void:
 	if not _pending_scene.is_empty(): return

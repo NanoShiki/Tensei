@@ -2,7 +2,7 @@ extends RefCounted
 
 const Log = preload("res://Scripts/Core/game_log.gd")
 const VERSION := 1
-const CONTENT_VERSION := "demo-familia-2"
+const CONTENT_VERSION := "demo-familia-3"
 const BASE_HP := 28
 const HP_PER_LEVEL := 3
 const MAX_LEVEL := 5
@@ -16,12 +16,16 @@ var data: Dictionary = {}
 var message := ""
 
 static func initial() -> Dictionary:
-	return {"player_id": Crypto.new().generate_random_bytes(16).hex_encode(), "familias": {"dawn": {"contribution": 0, "squire_xp": 0, "scout_xp": 0, "events": {}}}}
+	return {"player_id": Crypto.new().generate_random_bytes(16).hex_encode(), "familias": {"dawn": {"contribution": 0, "squire_xp": 0, "scout_xp": 0, "events": {}}, "ember": {"contribution": 0, "events": {}}}}
 
 static func valid(snapshot: Variant) -> bool:
 	if not snapshot is Dictionary or not snapshot.get("player_id") is String or not snapshot.get("familias") is Dictionary: return false
 	if snapshot.player_id.length() != 32 or not snapshot.player_id.is_valid_hex_number(false): return false
-	if snapshot.familias.size() != 1 or not snapshot.familias.get("dawn") is Dictionary: return false
+	if snapshot.familias.size() != 2 or not snapshot.familias.get("dawn") is Dictionary or not snapshot.familias.get("ember") is Dictionary: return false
+	var workshop: Dictionary = snapshot.familias.ember
+	if not workshop.get("contribution") is int or not workshop.get("events") is Dictionary or workshop.contribution < 0 or workshop.contribution != workshop.events.size() or workshop.events.size() > 20000: return false
+	for id in workshop.events:
+		if not id is String or id.is_empty() or id.length() > 300 or typeof(workshop.events[id]) != TYPE_BOOL or not workshop.events[id]: return false
 	var guild: Dictionary = snapshot.familias.dawn
 	if not guild.get("contribution") is int or not guild.get("squire_xp") is int or not guild.get("scout_xp") is int or not guild.get("events") is Dictionary: return false
 	if guild.contribution < 0 or guild.events.size() > 20000 or guild.contribution != guild.events.size(): return false
@@ -63,12 +67,15 @@ func _read(path: String) -> Dictionary:
 	if file == null or file.get_length() > 8 * 1024 * 1024: return {"invalid": true}
 	var envelope: Variant = file.get_var(false)
 	if not envelope is Dictionary: return {"invalid": true}
-	if envelope.get("version") != VERSION or envelope.get("content_version") not in [CONTENT_VERSION, "demo-familia-1"]: return {"incompatible": true}
+	if envelope.get("version") != VERSION or envelope.get("content_version") not in [CONTENT_VERSION, "demo-familia-2", "demo-familia-1"]: return {"incompatible": true}
 	if not envelope.get("generation") is int or envelope.generation < 1: return {"invalid": true}
 	if not envelope.get("payload") is PackedByteArray or not envelope.get("checksum") is String: return {"invalid": true}
 	if _checksum(envelope.payload) != envelope.checksum: return {"invalid": true}
 	var snapshot: Variant = bytes_to_var(envelope.payload)
+	if envelope.content_version != CONTENT_VERSION:
+		if not snapshot is Dictionary or not snapshot.get("familias") is Dictionary or snapshot.familias.size() != 1 or not snapshot.familias.has("dawn"): return {"invalid": true}
 	if envelope.content_version == "demo-familia-1": snapshot = migrate_legacy(snapshot)
+	if envelope.content_version != CONTENT_VERSION and snapshot is Dictionary: snapshot.familias.ember = {"contribution": 0, "events": {}}
 	if not valid(snapshot): return {"invalid": true}
 	return {"generation": envelope.generation, "data": snapshot, "path": path}
 
@@ -171,7 +178,8 @@ static func valid_hp_limit(hp: int, id: String = "squire") -> bool:
 static func max_hp_for(id: String) -> int:
 	return int(MEMBERS[id].base_hp) + HP_PER_LEVEL * (MAX_LEVEL - 1) if MEMBERS.has(id) else 0
 
-func guild_level() -> int:
+func guild_level(familia_id: String = "dawn") -> int:
 	if data.is_empty(): return 1
-	var contribution: int = data.familias.dawn.contribution
+	if not data.familias.has(familia_id): return 0
+	var contribution: int = data.familias[familia_id].contribution
 	return 3 if contribution >= 8 else (2 if contribution >= 3 else 1)

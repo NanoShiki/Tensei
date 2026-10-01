@@ -8,6 +8,28 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_transfer_preserves_old_growth_and_personal_progress(self):
+        shared = {"player_id": "test", "familias": {"dawn": {"contribution": 3, "squire_xp": 6, "scout_xp": 0, "events": {}}, "ember": {"contribution": 0, "events": {}}}}
+        before = {"phase": "city", "steps": 0, "respawn": {}, "hero": {"familia_id": "dawn", "player_id": "test",
+            "hp": 36, "weapon": "iron_sword", "gold": 9, "growth_pending": [], "quests": {"hunt": "claimed"},
+            "party_enlisted": True, "party_hp": 28, "scout_enlisted": False, "scout_hp": 0}}
+        after = json.loads(json.dumps(before))
+        after["hero"].update(familia_id="ember", party_enlisted=False, party_hp=0)
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "familia", "event": "service",
+            "data": {"action": "join_ember", "success": True, "before": before, "after": after, "shared_before": shared, "shared_after": shared}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            after["hero"]["gold"] = 0
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertTrue(inspect([path])[1])
+            after["hero"]["gold"] = 9
+            row["data"]["shared_after"] = json.loads(json.dumps(shared))
+            row["data"]["shared_after"]["familias"]["dawn"]["squire_xp"] = 0
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("transfer changed shared growth", inspect([path])[1][0])
+
     def test_gm_recovery_cannot_revive_or_grant_actions(self):
         before = {"hero": {"hp": 10, "max_hp": 36, "potions": 1, "fire_potions": 2},
             "ally": {"hp": 0, "max_hp": 28}, "scout": {"hp": 8, "max_hp": 22}, "actions": 0}

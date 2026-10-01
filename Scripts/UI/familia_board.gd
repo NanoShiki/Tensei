@@ -1,6 +1,7 @@
 extends Window
 
 signal changed
+const Familias = preload("res://Scripts/Character/familia_library.gd")
 var flow: Node
 var rows: VBoxContainer
 var feedback: Label
@@ -8,7 +9,7 @@ var buttons: Dictionary = {}
 
 func open(game_flow: Node) -> void:
 	flow = game_flow
-	title = "晨行眷族与编队"
+	title = "眷族归属与编队"
 	transient = true
 	exclusive = true
 	unresizable = true
@@ -61,9 +62,10 @@ func _refresh() -> void:
 		child.queue_free()
 	buttons.clear()
 	var hero: Dictionary = flow.run.character
+	_text("当前归属：" + Familias.name_for(hero.familia_id) + "\n每个角色同时加入一个眷族；转会保留原组织成长与个人任务，旧队友留城。")
 	_text("晨行眷族 · 远征与讨伐\n加入资格：交付“初次讨伐”委托。当前：" + ("已达成" if hero.quests.hunt == "claimed" else "未达成"))
 	var joined: bool = hero.familia_id == "dawn"
-	_button("join", "已加入晨行眷族" if joined else "加入晨行眷族", joined or hero.quests.hunt != "claimed")
+	_button("join", "已加入晨行眷族" if joined else ("加入晨行眷族" if hero.familia_id.is_empty() else "转入晨行眷族 · 免费"), joined or hero.quests.hunt != "claimed")
 	if joined:
 		var available: bool = flow.progress.refresh() and flow.progress.data.get("player_id") == hero.player_id
 		if available:
@@ -79,10 +81,42 @@ func _refresh() -> void:
 			var scout: Dictionary = flow.progress.companion("scout")
 			_text("见习游侠 · 弓箭手 · 等级 %d · 经验 %d\n生命上限 %d · 命中 +5 · 防御 12 · 敏捷 +3\n等级 2 开放瞄准射击；晨行眷族等级 2 可招募。\n当前：%s" % [scout.level, scout.experience, scout.max_hp, "已编队 · 生命 %d/%d" % [hero.scout_hp, scout.max_hp] if hero.scout_enlisted else "未编队"])
 		_button("dismiss_scout" if hero.scout_enlisted else "enlist_scout", "让游侠留在城市" if hero.scout_enlisted else "招募见习游侠 · 免费 · 眷族等级 2", not available or (not hero.scout_enlisted and flow.progress.guild_level() < 2))
-		_button("retry", "同步待提交成长 · %d 条" % hero.growth_pending.size(), hero.growth_pending.is_empty() or not available)
+	_text("炉心眷族 · 锻造与工艺\n加入资格：打造并装备铁剑。当前：" + ("已达成" if hero.weapon == "iron_sword" else "未达成") + "\n专业贡献与会员服务将在后续切片接入；当前不提供远征队友。")
+	_button("join_ember", "已加入炉心眷族" if hero.familia_id == "ember" else ("加入炉心眷族" if hero.familia_id.is_empty() else "转入炉心眷族 · 免费"), hero.familia_id == "ember" or hero.weapon != "iron_sword")
+	if hero.familia_id == "ember":
+		var level: int = flow.guild_level()
+		_text("炉心等级 %d · 贡献 %d\n晨行成员巡守暂停推进和交付，转回晨行后从原进度继续。" % [level, flow.progress.data.get("familias", {}).get("ember", {}).get("contribution", 0)] if level > 0 else "炉心共享档案不可用，请恢复同一玩家备份。")
+	if not hero.familia_id.is_empty():
+		_button("retry", "同步待提交成长 · %d 条" % hero.growth_pending.size(), hero.growth_pending.is_empty())
 	feedback.text = "眷族与队友成长自动写入共享档案；角色归属、编队和当前生命需手动保存。最多三人和免费招募为 Demo 规则。"
 
 func _act(action: String) -> void:
+	if action in ["join", "join_ember"] and not flow.run.character.familia_id.is_empty():
+		var target := "dawn" if action == "join" else "ember"
+		if target != flow.run.character.familia_id:
+			_confirm_transfer(action, target)
+			return
+	_apply(action)
+
+func _confirm_transfer(action: String, target: String) -> void:
+	for child in get_children():
+		if child is ConfirmationDialog: return
+	var confirm := ConfirmationDialog.new()
+	confirm.title = "确认转会"
+	confirm.ok_button_text = "确认转会"
+	confirm.cancel_button_text = "取消"
+	confirm.transient = true
+	confirm.exclusive = true
+	confirm.dialog_text = "转入%s？\n旧组织成长保留，晨行队友将留城，个人装备／任务保留。\n晨行巡守在其他眷族暂停；先同步待提交成长，主角须存活。\nDemo 免费转会，确认后请手动保存。" % Familias.name_for(target)
+	confirm.confirmed.connect(func():
+		_apply(action)
+		confirm.queue_free())
+	confirm.canceled.connect(confirm.queue_free)
+	confirm.close_requested.connect(confirm.queue_free)
+	add_child(confirm)
+	confirm.popup_centered(Vector2i(570, 235))
+
+func _apply(action: String) -> void:
 	if flow.familia_service(action):
 		_refresh()
 		changed.emit()

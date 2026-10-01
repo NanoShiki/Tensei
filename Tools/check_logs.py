@@ -90,10 +90,19 @@ def inspect(paths):
                             assert before == after, "rejected familia service changed character"
                         else:
                             assert before["phase"] == "city" and before["steps"] == after["steps"] and before["respawn"] == after["respawn"], "familia service moved exploration"
-                            if data["action"] == "join":
-                                assert before["hero"]["familia_id"] == "" and before["hero"]["quests"]["hunt"] == "claimed", "familia qualification"
-                                assert after["hero"]["familia_id"] == "dawn" and after["hero"]["player_id"] == data["shared_after"]["player_id"], "familia owner binding"
+                            if data["action"] in ("join", "join_ember"):
+                                target = "dawn" if data["action"] == "join" else "ember"
+                                old, hero = before["hero"], after["hero"]
+                                assert old["familia_id"] != target and old["hp"] > 0 and not old["growth_pending"], "familia transfer prerequisites"
+                                assert old["quests"]["hunt"] == "claimed" if target == "dawn" else old["weapon"] == "iron_sword", "familia qualification"
+                                assert hero["familia_id"] == target and hero["player_id"] == data["shared_after"]["player_id"], "familia owner binding"
+                                expected = json.loads(json.dumps(before))
+                                expected["hero"].update(familia_id=target, player_id=hero["player_id"], party_enlisted=False, party_hp=0, scout_enlisted=False, scout_hp=0)
+                                assert expected == after, "transfer changed unrelated personal progress"
+                                if old["familia_id"]:
+                                    assert data["shared_before"] == data["shared_after"], "transfer changed shared growth"
                             if data["action"] == "enlist":
+                                assert after["hero"]["familia_id"] == "dawn", "foreign member enlist"
                                 assert after["hero"]["party_enlisted"] and after["hero"]["party_hp"] > 0, "party enlist"
                             if data["action"] == "enlist_scout":
                                 assert after["hero"]["scout_enlisted"] and after["hero"]["scout_hp"] > 0 and data["shared_after"]["familias"]["dawn"]["contribution"] >= 3, "scout enlist qualification"

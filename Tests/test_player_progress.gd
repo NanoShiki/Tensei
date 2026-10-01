@@ -57,6 +57,7 @@ func _initialize() -> void:
 	var team := Progress.new()
 	team.base_path = base + "-team"
 	var legacy := Progress.initial()
+	legacy.familias.erase("ember")
 	legacy.familias.dawn.erase("scout_xp")
 	legacy.familias.dawn.events = {"legacy": true}
 	legacy.familias.dawn.contribution = 1
@@ -66,6 +67,20 @@ func _initialize() -> void:
 	var original := FileAccess.get_file_as_bytes(team.base_path + ".0.save")
 	check(team.ensure() and team.data.player_id == legacy.player_id and team.data.familias.dawn.scout_xp == 0 and team.data.familias.dawn.events.legacy == ["squire"], "旧共享档案保持身份并补独立游侠成长")
 	check(FileAccess.get_file_as_bytes(team.base_path + ".0.save") == original, "读取迁移只在内存且保留原文件")
+	var previous := Progress.new()
+	previous.base_path = base + "-previous"
+	var old_two := team.data.duplicate(true)
+	old_two.familias.erase("ember")
+	payload = var_to_bytes(old_two)
+	write_data(previous.base_path + ".0.save", {"version": 1, "content_version": "demo-familia-2", "generation": 1, "payload": payload, "checksum": previous._checksum(payload)})
+	original = FileAccess.get_file_as_bytes(previous.base_path + ".0.save")
+	check(previous.refresh() and previous.data.familias.dawn == old_two.familias.dawn and previous.data.familias.ember.contribution == 0, "旧参战名单档案补独立炉心记录且晨行账本不变")
+	check(FileAccess.get_file_as_bytes(previous.base_path + ".0.save") == original, "旧第二版共享读取保留原字节")
+	invalid = previous.data.duplicate(true)
+	invalid.familias.ember.events["bad"] = 1
+	invalid.familias.ember.contribution = 1
+	check(not Progress.valid(invalid), "拒绝非法专业贡献账本")
+	for suffix in [".0.save", ".1.save", ".tmp"]: DirAccess.remove_absolute(previous.base_path + suffix)
 	check(team.award_victory("scout-only", legacy.player_id, ["scout"]) and team.data.familias.dawn.scout_xp == 2 and team.data.familias.dawn.squire_xp == 2, "仅游侠参战不增加卫士经验")
 	check(team.award_victory("both", legacy.player_id, ["squire", "scout"]) and team.data.familias.dawn.contribution == 3 and team.data.familias.dawn.scout_xp == 4 and team.data.familias.dawn.squire_xp == 4, "两队友胜利组织贡献一次、各人经验分别增加")
 	var shared_before: Dictionary = team.data.duplicate(true)

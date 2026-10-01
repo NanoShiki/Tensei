@@ -79,6 +79,8 @@ func _run() -> void:
 	check(screen.targets.lorn.position.x < screen.targets.squire.position.x and screen.targets.squire.position.x < screen.targets.goblin.position.x, "两名己方在左、敌人在右")
 	screen.battle.cursor = screen.battle.order.find("lorn")
 	screen.battle.action = 1
+	# 演练先攻随机；敌人首回合可能已经伤到洛恩。此处隔离满血主角的治疗目标用例。
+	screen.battle.hero.hp = screen.battle.hero.max_hp
 	screen.battle.ally.hp = 10
 	screen._refresh()
 	screen.buttons.potion.pressed.emit()
