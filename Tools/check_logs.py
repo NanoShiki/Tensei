@@ -93,7 +93,7 @@ def inspect(paths):
                             if data["action"] in ("join", "join_ember"):
                                 target = "dawn" if data["action"] == "join" else "ember"
                                 old, hero = before["hero"], after["hero"]
-                                assert old["familia_id"] != target and old["hp"] > 0 and not old["growth_pending"], "familia transfer prerequisites"
+                                assert old["familia_id"] != target and old["hp"] > 0 and not old["growth_pending"] and not old.get("forge_pending", []), "familia transfer prerequisites"
                                 assert old["quests"]["hunt"] == "claimed" if target == "dawn" else old["weapon"] == "iron_sword", "familia qualification"
                                 assert hero["familia_id"] == target and hero["player_id"] == data["shared_after"]["player_id"], "familia owner binding"
                                 expected = json.loads(json.dumps(before))
@@ -114,6 +114,35 @@ def inspect(paths):
                         assert all(event in data["before"] for event in data["after"]), "sync invented event"
                         if data["success"]:
                             assert data["after"] == [], "successful sync still pending"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
+            if row["category"] == "workshop":
+                try:
+                    if row["event"] == "contribution" and data["success"]:
+                        old, new = data["before"], data["after"]
+                        expected = json.loads(json.dumps(old))
+                        guild = expected["familias"]["ember"]
+                        if data["duplicate"]:
+                            assert guild["events"].get(data["id"]) is True, "duplicate forge missing ledger"
+                        else:
+                            assert data["id"] not in guild["events"], "forge reward already recorded"
+                            guild["events"][data["id"]] = True
+                            guild["contribution"] += 1
+                        assert expected == new, "forge contribution changed unrelated shared growth"
+                    if row["event"] == "craft":
+                        old, new = data["before"], data["after"]
+                        expected = json.loads(json.dumps(old))
+                        expected["message"] = new["message"]
+                        if data["success"]:
+                            hero = old["hero"]
+                            assert old["phase"] == "city" and not old["pending"] and hero["weapon"] != "iron_sword" and hero["gold"] >= 6 and hero["scrap"] >= 3 and not hero.get("forge_pending", []), "forge prerequisites"
+                            assert not hero["player_id"] or hero["player_id"] == data["player_id"], "forge rebound shared owner"
+                            assert new["hero"]["forge_pending"] in ([], [data["id"]]), "forge outbox"
+                            expected["hero"].update(gold=hero["gold"]-6, scrap=hero["scrap"]-3, weapon="iron_sword", player_id=data["player_id"], forge_pending=new["hero"]["forge_pending"])
+                        assert expected == new, "forge changed unrelated personal progress"
+                    if row["event"] == "sync":
+                        assert all(event in data["before"] for event in data["after"]), "forge sync invented event"
+                        if data["success"]: assert not data["after"], "successful forge sync still pending"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
             if row["category"] == "inventory" and row["event"] == "field_potion":

@@ -8,6 +8,20 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_forge_contribution_changes_only_service_provider(self):
+        old = {"player_id": "test", "familias": {"dawn": {"contribution": 3, "squire_xp": 6}, "ember": {"contribution": 0, "events": {}}}}
+        new = json.loads(json.dumps(old))
+        new["familias"]["ember"].update(contribution=1, events={"forge-test": True})
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "workshop", "event": "contribution",
+            "data": {"id": "forge-test", "success": True, "duplicate": False, "before": old, "after": new}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            new["familias"]["dawn"]["squire_xp"] = 0
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("forge contribution changed unrelated shared growth", inspect([path])[1][0])
+
     def test_transfer_preserves_old_growth_and_personal_progress(self):
         shared = {"player_id": "test", "familias": {"dawn": {"contribution": 3, "squire_xp": 6, "scout_xp": 0, "events": {}}, "ember": {"contribution": 0, "events": {}}}}
         before = {"phase": "city", "steps": 0, "respawn": {}, "hero": {"familia_id": "dawn", "player_id": "test",

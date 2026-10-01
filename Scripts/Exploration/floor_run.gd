@@ -409,7 +409,7 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.phase not in ["descending", "returning", "city"] or data.steps_taken < 0 or data.battles_won < 0: return null
 	data = data.duplicate(true)
 	# 原地图记录没有经济字段，读取时补零余额和原木剑，保留原文件。
-	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "job_id", "familia_wins", "scout_enlisted", "scout_hp", "depth_goal"]:
+	for key in ["gold", "scrap", "weapon", "captain_defeated", "experience", "level", "hunt_wins", "quests", "familia_id", "player_id", "party_enlisted", "party_hp", "growth_pending", "forge_pending", "job_id", "familia_wins", "scout_enlisted", "scout_hp", "depth_goal"]:
 		if not data.character.has(key): data.character[key] = CharacterLibrary.resolve()[key]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
@@ -432,8 +432,13 @@ static func from_save(data: Variant) -> RefCounted:
 	if not data.character.familia_id.is_empty() and not Familias.ENTRIES.has(data.character.familia_id): return null
 	if data.character.familia_id != "dawn" and (data.character.party_enlisted or data.character.scout_enlisted): return null
 	if data.character.familia_id.is_empty():
-		if not owner.is_empty() or data.character.party_enlisted or data.character.scout_enlisted or not data.character.growth_pending.is_empty(): return null
-	elif owner.length() != 32 or not owner.is_valid_hex_number(false): return null
+		if data.character.party_enlisted or data.character.scout_enlisted or not data.character.growth_pending.is_empty(): return null
+	if not owner.is_empty():
+		if owner.length() != 32 or not owner.is_valid_hex_number(false): return null
+	elif not data.character.familia_id.is_empty() or not data.character.forge_pending.is_empty(): return null
+	if data.character.forge_pending.size() > 1: return null
+	for event in data.character.forge_pending:
+		if not PlayerProgress.valid_forge_event(event) or data.character.weapon != "iron_sword": return null
 	if data.character.party_hp < 0 or data.character.party_hp > PlayerProgress.MAX_HP or (not data.character.party_enlisted and data.character.party_hp != 0): return null
 	if data.character.scout_hp < 0 or data.character.scout_hp > PlayerProgress.max_hp_for("scout") or (not data.character.scout_enlisted and data.character.scout_hp != 0): return null
 	if data.character.hp == 0 and (not data.character.party_enlisted or data.character.party_hp == 0) and (not data.character.scout_enlisted or data.character.scout_hp == 0): return null

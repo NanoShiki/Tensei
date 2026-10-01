@@ -170,6 +170,36 @@ func companion(id: String = "squire") -> Dictionary:
 	var hp: int = member.base_hp + HP_PER_LEVEL * (level - 1)
 	return {"id": id, "name": member.name, "hp": hp, "max_hp": hp, "ac": member.ac, "attack": member.attack, "dex": member.dex, "job_id": member.job_id, "surge": 1, "weapon": "training_sword", "level": level, "experience": xp}
 
+static func forge_event(profile_id: String) -> String:
+	return "profile/" + profile_id + "/forge/iron_sword"
+
+static func valid_forge_event(event_id: Variant) -> bool:
+	if not event_id is String: return false
+	var parts: PackedStringArray = event_id.split("/")
+	return parts.size() == 4 and parts[0] == "profile" and (parts[1] == "legacy" or (parts[1].length() == 32 and parts[1].is_valid_hex_number(false))) and parts[2] == "forge" and parts[3] == "iron_sword"
+
+func award_forge(event_id: String, player_id: String) -> bool:
+	var previous := inspect()
+	var before: Dictionary = previous.get("data", {}).duplicate(true)
+	var success := false
+	var duplicate := false
+	if previous.is_empty() or before.get("player_id") != player_id:
+		if message.is_empty(): message = "共享档案缺失或归属不符，锻造贡献等待重试。"
+	elif not valid_forge_event(event_id): message = "锻造贡献事件无效。"
+	else:
+		var candidate := before.duplicate(true)
+		if candidate.familias.ember.events.has(event_id):
+			data = before.duplicate(true)
+			message = ""
+			duplicate = true
+			success = true
+		else:
+			candidate.familias.ember.events[event_id] = true
+			candidate.familias.ember.contribution += 1
+			success = _commit(candidate, previous)
+	Log.event("workshop", "contribution", {"id": event_id, "success": success, "duplicate": duplicate, "reason": message, "before": before, "after": data.duplicate(true)}, "INFO" if success else "ERROR")
+	return success
+
 static func valid_hp_limit(hp: int, id: String = "squire") -> bool:
 	if not MEMBERS.has(id): return false
 	var base: int = MEMBERS[id].base_hp

@@ -102,10 +102,12 @@ func _restart_check(phase: String) -> void:
 	if phase == "write":
 		check(progress.ensure(), "独立进程建立共享身份")
 		for i in range(5): check(progress.award_victory("restart-" + str(i), progress.data.player_id, ["squire", "scout"]), "独立进程写入两位队友共享成长")
+		check(progress.award_forge(Progress.forge_event("legacy"), progress.data.player_id), "独立进程写入锻造贡献")
 	else:
 		check(progress.refresh() and progress.companion().level == 2 and progress.companion("scout").level == 2 and progress.guild_level() == 2, "新进程恢复玩家身份、两位队友与组织成长")
 		var generation: int = progress.inspect().generation
 		check(progress.award_victory("restart-0", progress.data.player_id) and progress.inspect().generation == generation, "新进程恢复去重账本")
+		check(progress.data.familias.ember.contribution == 1 and progress.award_forge(Progress.forge_event("legacy"), progress.data.player_id) and progress.inspect().generation == generation, "新进程恢复锻造贡献和去重且不重复写盘")
 		for suffix in [".0.save", ".1.save", ".tmp"]: DirAccess.remove_absolute(progress.base_path + suffix)
 	print("FAMILIA RESTART CHECKS: ", failures, " failures")
 	quit(1 if failures else 0)

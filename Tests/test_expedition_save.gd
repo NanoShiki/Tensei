@@ -16,6 +16,9 @@ func _initialize() -> void:
 		run.finish_battle(run.character, true)
 		run.enter("2b")
 		run.begin_return()
+		run.character.weapon = "iron_sword"
+		run.character.player_id = "01234567890123456789012345678901"
+		run.character.forge_pending = ["profile/legacy/forge/iron_sword"]
 		if phase == "write": check(store.save_run(run), "独立进程写档")
 		else:
 			var saved := store.inspect()
