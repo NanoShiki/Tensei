@@ -27,6 +27,7 @@ var direction_button: Button
 var city_buttons: Dictionary = {}
 var inventory: Window
 var party_practice := false
+var pause_button: Button
 
 func _ready() -> void:
 	add_to_group("gm_battle_context")
@@ -56,6 +57,7 @@ func _clear() -> void:
 	city_buttons.clear()
 	expedition_button = null
 	direction_button = null
+	pause_button = null
 
 func _panel(rect: Rect2, color: Color = Color("182326"), border: Color = Color("3d4a48")) -> PanelContainer:
 	var panel := PanelContainer.new()
@@ -143,6 +145,7 @@ func _refresh() -> void:
 	_label("T E N S E I   /   地下城", Rect2(28, 16, 350, 28), 18, GOLD)
 	_label("第 %02d 层   ·   苔石回廊" % floor_number, Rect2(28, 49, 340, 24), 14, MUTED)
 	_button("指南 · F1", Rect2(340, 40, 120, 33), _open_guide)
+	pause_button = _button("暂停", Rect2(470, 42, 75, 30), _open_pause)
 	_label("第 %d 轮" % battle.round_number, Rect2(470, 12, 80, 24), 16, GOLD)
 	var stride := 100 if battle.order.size() == 5 else (122 if battle.order.size() == 4 else 152)
 	var slot_width := stride - 14
@@ -283,12 +286,12 @@ func _ability_button(id: String, rect: Rect2) -> void:
 	buttons[id] = button
 
 func _select(id: String) -> void:
-	if busy or not battle.reason(id).is_empty(): return
+	if get_tree().paused or busy or not battle.reason(id).is_empty(): return
 	selected = "" if selected == id else id
 	_refresh()
 
 func _target(id: String) -> void:
-	if busy or selected.is_empty(): return
+	if get_tree().paused or busy or selected.is_empty(): return
 	if battle.use_ability(selected, id):
 		selected = ""
 		busy = true
@@ -309,7 +312,7 @@ func _feedback() -> void:
 	await tween.finished
 
 func _end_turn() -> void:
-	if busy or not battle.end_turn(): return
+	if get_tree().paused or busy or not battle.end_turn(): return
 	selected = ""
 	_refresh()
 	_drive_enemy()
@@ -321,7 +324,7 @@ func _drive_enemy() -> void:
 	busy = true
 	_refresh()
 	while battle.is_enemy_turn():
-		await get_tree().create_timer(0.5).timeout
+		await get_tree().create_timer(0.5, false).timeout
 		battle.enemy_turn()
 		_refresh()
 		await _feedback()
@@ -337,6 +340,7 @@ func _settle() -> void:
 		if flow.run != null: flow.settle_battle(battle.hero, battle.ally, battle.outcome == "victory", battle.scout)
 
 func gm_recovery_reason(action: String) -> String:
+	if get_tree().paused: return "请先继续旅程"
 	if action not in ["restore_party", "refill_potions"]: return "未知测试操作"
 	if busy: return "请等待当前动作结束"
 	for child in get_children():
@@ -380,6 +384,7 @@ func gm_recovery(action: String) -> bool:
 	return true
 
 func gm_kill_reason() -> String:
+	if get_tree().paused: return "请先继续旅程"
 	if map_visible or battle == null: return "请先进入战斗"
 	if battle.outcome != "ongoing" or _settled: return "战斗已结束"
 	if busy: return "等待当前动作结束"
@@ -402,6 +407,7 @@ func show_floor_map() -> void:
 	selected = ""
 	_clear()
 	_backdrop()
+	pause_button = _button("暂停 · Esc", Rect2(1070, 650, 170, 36), _open_pause)
 	var run: RefCounted = flow.run
 	if run.phase == "city":
 		_show_city()
@@ -616,6 +622,13 @@ func _input(event: InputEvent) -> void:
 	if gm != null and gm.is_open(): return
 	for child in get_children():
 		if child is Window and child.visible: return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		if not map_visible and not selected.is_empty() and not busy:
+			selected = ""
+			_refresh()
+		else: _open_pause()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
 		_open_guide()
 		get_viewport().set_input_as_handled()
@@ -664,6 +677,25 @@ func _open_guide() -> void:
 	add_child(guide)
 	var run: RefCounted = flow.run if flow != null and flow.run != null else null
 	guide.open(run, flow.guild_level() if run != null else 0)
+
+func pause_snapshot() -> Dictionary:
+	var state := {"scope": "map" if map_visible else "battle", "selected": selected, "busy": busy}
+	if flow != null and flow.run != null: state["run"] = flow.run.log_state()
+	if not map_visible and battle != null:
+		state["battle"] = battle.log_state()
+		state["rng"] = str(battle.rng.state)
+	return state
+
+func _open_pause() -> void:
+	if get_tree().paused: return
+	var gm := get_tree().get_first_node_in_group("gm_panel")
+	if gm != null and gm.is_open(): return
+	for child in get_children():
+		if child is Window and child.visible: return
+	var panel := preload("res://Scripts/UI/pause_menu.gd").new()
+	add_child(panel)
+	panel.menu_requested.connect(_return_to_menu)
+	panel.open(pause_snapshot)
 
 func _open_jobs() -> void:
 	if not _can_open_city_board(): return
