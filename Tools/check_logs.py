@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 import json
 from pathlib import Path
 
-UNITS = {"lorn": "hero", "squire": "ally", "scout": "scout", "goblin": "enemy"}
+UNITS = {"lorn": "hero", "squire": "ally", "scout": "scout", "goblin": "enemy", "goblin_b": "enemy_b"}
 GUARDS = {"lorn": "guarding", "squire": "ally_guarding", "scout": "scout_guarding"}
 
 
@@ -47,7 +47,7 @@ def inspect(paths):
                     assert data["roll_mode"] == expected_mode, "attack advantage cancellation"
                     assert len(rolls) == (1 if expected_mode == "normal" else 2), "attack dice count"
                     assert data["roll"] == (max(rolls) if expected_mode == "advantage" else min(rolls)), "attack selected die"
-                    if data["actor"] == "goblin":
+                    if data["actor"] in ("goblin", "goblin_b"):
                         assert data["advantage"] == (data["content_id"] == "prowler"), "enemy attack profile"
                     expected_hit = data["roll"] == 20 or (data["roll"] != 1 and data["roll"] + data["modifier"] >= data["ac"])
                     assert data["hit"] == expected_hit, "attack hit result"
@@ -286,14 +286,31 @@ def inspect(paths):
                     state = data["after"]
                     assert all(0 <= state[k]["hp"] <= state[k]["max_hp"] for k in ("hero", "enemy")), "battle health bounds"
                     assert state["actions"] >= 0, "negative actions"
-                    for member in ("ally", "scout"):
+                    for member in ("ally", "scout", "enemy_b"):
                         if state.get(member):
                             assert 0 <= state[member]["hp"] <= state[member]["max_hp"], "ally health bounds"
+                    if state.get("outcome") == "victory":
+                        assert state["enemy"]["hp"] == 0 and (not state.get("enemy_b") or state["enemy_b"]["hp"] == 0), "victory with living enemy"
                     if not data["success"]:
                         assert data["before"] == state, "rejected action changed state"
                     elif row["event"] == "use_ability":
                         old = data["before"]
                         assert old["actor"] in ("lorn", "squire", "scout") and old["actions"] > 0 and state["actions"] == old["actions"] - 1, "ability action cost"
+                        ability, target = data["input"]["ability"], data["input"]["target"]
+                        if target in ("goblin", "goblin_b"):
+                            assert old[UNITS[target]]["hp"] > 0, "attacked downed enemy"
+                            other = "enemy_b" if target == "goblin" else "enemy"
+                            assert state.get(other) == old.get(other), "ability affected unselected enemy"
+                    elif row["event"] == "enemy_turn":
+                        assert data["before"]["actor"] in ("goblin", "goblin_b"), "enemy turn from friendly actor"
+                        for opponent in ("enemy", "enemy_b"):
+                            assert state.get(opponent) == data["before"].get(opponent), "enemy action changed enemy health"
+                    elif row["event"] == "gm_kill_enemy":
+                        for member in ("hero", "ally", "scout"):
+                            assert state.get(member) == data["before"].get(member), "GM kill changed friendly resources"
+                        assert state["outcome"] == "victory" and state["actions"] == data["before"]["actions"], "GM kill did not complete all enemies"
+                    if data["success"] and row["event"] == "use_ability":
+                        old = data["before"]
                         ability, target = data["input"]["ability"], data["input"]["target"]
                         if ability in ("arcane_bolt", "aimed_shot", "ambush"):
                             actor = old[UNITS[old["actor"]]]

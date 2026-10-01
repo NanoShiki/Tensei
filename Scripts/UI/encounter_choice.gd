@@ -26,12 +26,16 @@ func open(preview: Dictionary, expedition: RefCounted) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	margin.add_child(box)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(scroll)
 	var text := Label.new()
 	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	text.add_theme_font_size_override("font_size", 19)
-	text.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	text.text = "前方：%s\n%s\n\n交战：胜利获得战利品并清理节点。\n绕行：消耗灼烧药水 ×1（持有 %d），怪物保留，无战利品，不完成讨伐。\n\n确认后移动 1 步；取消不移动、不消耗。" % [preview.name, preview.get("details", ""), preview.stock]
-	box.add_child(text)
+	scroll.add_child(text)
 	fight_button = _button(box, "进入交战", func(): _decide(false))
 	avoid_button = _button(box, "消耗灼烧药水 ×1 · 掩护绕行", func(): _decide(true))
 	avoid_button.disabled = not preview.can_avoid

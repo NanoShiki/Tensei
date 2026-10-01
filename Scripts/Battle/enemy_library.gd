@@ -18,3 +18,10 @@ static func resolve(id: String, floor_number: int = 1) -> Dictionary:
 static func preview(id: String, floor_number: int) -> String:
 	var enemy := resolve(id, floor_number)
 	return "生命 %d · 防御 AC %d · 命中 +%d · 敏捷 +%d\n%s" % [enemy.max_hp, enemy.ac, enemy.attack, enemy.dex, ENTRIES[enemy.content_id].threat]
+
+static func encounter_name(first: String, second: String = "") -> String:
+	return str(ENTRIES[first].name) if second.is_empty() else "双敌巡逻队"
+
+static func encounter_preview(first: String, second: String, floor_number: int) -> String:
+	if second.is_empty(): return preview(first, floor_number)
+	return "%s：%s\n%s：%s\n每名敌人独立行动；清除全部敌人后，按一个节点结算战利品。" % [ENTRIES[first].name, preview(first, floor_number), ENTRIES[second].name, preview(second, floor_number)]
