@@ -6,6 +6,7 @@ const FloorRun = preload("res://Scripts/Exploration/floor_run.gd")
 const Familias = preload("res://Scripts/Character/familia_library.gd")
 const Weapons = preload("res://Scripts/Character/weapon_library.gd")
 const Commerce = preload("res://Scripts/Character/commerce_library.gd")
+const Armors = preload("res://Scripts/Character/armor_library.gd")
 const MENU_SCENE := "res://Scenes/UI/main_menu.tscn"
 const BATTLE_SCENE := "res://Scenes/Battle/battle.tscn"
 var active_character: Dictionary = {}
@@ -56,7 +57,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-trade-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-armor-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -234,7 +235,7 @@ func quest_service(id: String, action: String) -> bool:
 
 func city_service(action: String) -> bool:
 	if run == null: return false
-	if action in ["forge", "forge_tempered"]: return _forge_service("iron_sword" if action == "forge" else "tempered_sword")
+	if action in ["forge", "forge_tempered", "forge_armor"]: return _forge_service({"forge": "iron_sword", "forge_tempered": "tempered_sword", "forge_armor": "iron_armor"}[action])
 	var member := party_companion()
 	var scout := party_companion("scout")
 	return run != null and run.city_service(action, member.get("max_hp", 0), scout.get("max_hp", 0))
@@ -242,11 +243,18 @@ func city_service(action: String) -> bool:
 func forge_reason(recipe_id: String = "iron_sword") -> String:
 	if run == null or run.phase != "city" or not run.pending.is_empty(): return "请在城市工坊制作。"
 	if not run.character.forge_pending.is_empty(): return "请先同步待提交锻造贡献。"
+	if recipe_id == "iron_armor": return Armors.reason(run.character, recipe_id)
 	return Weapons.reason(run.character, recipe_id, guild_level() if recipe_id == "tempered_sword" else 0)
 
 func equip_weapon(id: String) -> bool:
 	if run == null: return false
 	var success: bool = run.equip_weapon(id)
+	if success: active_character = run.character.duplicate(true)
+	return success
+
+func equip_armor(id: String) -> bool:
+	if run == null or get_tree().paused: return false
+	var success: bool = run.equip_armor(id)
 	if success: active_character = run.character.duplicate(true)
 	return success
 
@@ -280,7 +288,7 @@ func _forge_service(recipe_id: String) -> bool:
 	elif not hero.player_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != hero.player_id):
 		run.message = "共享档案不可用或归属不符，请恢复备份后打造。" + progress.message
 	else:
-		if run.city_service("forge" if recipe_id == "iron_sword" else "forge_tempered", 0, 0, progress.guild_level("ember")):
+		if run.city_service({"iron_sword": "forge", "tempered_sword": "forge_tempered", "iron_armor": "forge_armor"}[recipe_id], 0, 0, progress.guild_level("ember")):
 			hero.player_id = progress.data.player_id
 			hero.forge_pending.append(event_id)
 			success = true

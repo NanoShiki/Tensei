@@ -10,6 +10,7 @@ const Familias = preload("res://Scripts/Character/familia_library.gd")
 const Weapons = preload("res://Scripts/Character/weapon_library.gd")
 const Commerce = preload("res://Scripts/Character/commerce_library.gd")
 const Trades = preload("res://Scripts/Character/trade_library.gd")
+const Armors = preload("res://Scripts/Character/armor_library.gd")
 var floor_number := 1
 var total_floors := 30
 var seed_value := 1
@@ -381,6 +382,17 @@ func _city_service(action: String, companion_max_hp: int = 0, scout_max_hp: int 
 			character.weapons.append(recipe_id)
 			character.weapon = recipe_id
 			message = "花费 %d 金币、%d 铁片，打造并装备%s。物理伤害 +%d。" % [recipe.gold, recipe.scrap, recipe.name, recipe.bonus]
+		"forge_armor":
+			var reason := Armors.reason(character, "iron_armor")
+			if not reason.is_empty():
+				message = reason
+				return false
+			character.gold -= Armors.ENTRIES.iron_armor.gold
+			character.scrap -= Armors.ENTRIES.iron_armor.scrap
+			character.armors.append("iron_armor")
+			character.armor = "iron_armor"
+			Jobs.apply(character, character.job_id)
+			message = "花费 6 金币、3 铁片，打造并装备铁甲，防御 AC +1。"
 		_: return false
 	return true
 
@@ -391,6 +403,16 @@ func equip_weapon(id: String) -> bool:
 		character.weapon = id
 		message = "已装备%s，物理伤害 +%d；装备选择请手动保存。" % [Weapons.ENTRIES[id].name, Weapons.ENTRIES[id].bonus]
 	Log.event("inventory", "equip", {"id": id, "success": success, "before": before, "after": log_state()}, "INFO" if success else "WARN")
+	return success
+
+func equip_armor(id: String) -> bool:
+	var before := log_state()
+	var success: bool = phase == "city" and pending.is_empty() and Armors.ENTRIES.has(id) and character.armors.has(id) and character.armor != id
+	if success:
+		character.armor = id
+		Jobs.apply(character, character.job_id)
+		message = "已装备%s，防御 AC %d；装备选择请手动保存。" % [Armors.ENTRIES[id].name, character.ac]
+	Log.event("inventory", "equip_armor", {"id": id, "success": success, "before": before, "after": log_state()}, "INFO" if success else "WARN")
 	return success
 
 func trade_reason(id: String, quantity: int) -> String:
@@ -503,6 +525,8 @@ static func from_save(data: Variant) -> RefCounted:
 	if not data.character.has("weapons"):
 		data.character.weapons = ["training_sword"]
 		if data.character.weapon != "training_sword": data.character.weapons.append(data.character.weapon)
+	if not data.character.has("armor"): data.character.armor = "cloth_armor"
+	if not data.character.has("armors"): data.character.armors = ["cloth_armor"]
 	var hero := CharacterLibrary.resolve()
 	for key in hero:
 		if not data.character.has(key) or typeof(data.character[key]) != typeof(hero[key]): return null
@@ -539,10 +563,15 @@ static func from_save(data: Variant) -> RefCounted:
 	for event in data.character.commerce_pending:
 		if not PlayerProgress.valid_commerce_event(event) or trade_ids.has(event) or not order_ids.has(event.get_slice("/", 3)): return null
 		trade_ids[event] = true
-	if data.character.forge_pending.size() > 2: return null
+	if data.character.armors.is_empty() or data.character.armors.size() > Armors.ENTRIES.size() or not Armors.ENTRIES.has(data.character.armor) or not data.character.armors.has(data.character.armor) or not data.character.armors.has("cloth_armor"): return null
+	var armor_ids := {}
+	for id in data.character.armors:
+		if not id is String or not Armors.ENTRIES.has(id) or armor_ids.has(id): return null
+		armor_ids[id] = true
+	if data.character.forge_pending.size() > 3: return null
 	var forge_ids := {}
 	for event in data.character.forge_pending:
-		if not PlayerProgress.valid_forge_event(event) or forge_ids.has(event) or not data.character.weapons.has(event.get_slice("/", 3)): return null
+		if not PlayerProgress.valid_forge_event(event) or forge_ids.has(event) or not (data.character.weapons + data.character.armors).has(event.get_slice("/", 3)): return null
 		forge_ids[event] = true
 	if data.character.party_hp < 0 or data.character.party_hp > PlayerProgress.MAX_HP or (not data.character.party_enlisted and data.character.party_hp != 0): return null
 	if data.character.scout_hp < 0 or data.character.scout_hp > PlayerProgress.max_hp_for("scout") or (not data.character.scout_enlisted and data.character.scout_hp != 0): return null

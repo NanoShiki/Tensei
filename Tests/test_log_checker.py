@@ -8,6 +8,20 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_armor_equip_changes_only_armor_and_defense(self):
+        old = {"phase": "city", "pending": "", "steps": 7, "message": "old", "hero": {"hp": 20, "ac": 14, "armor": "cloth_armor", "armors": ["cloth_armor", "iron_armor"]}}
+        new = json.loads(json.dumps(old))
+        new["hero"].update(armor="iron_armor", ac=15)
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "inventory", "event": "equip_armor",
+               "data": {"id": "iron_armor", "success": True, "before": old, "after": new}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            new["hero"]["hp"] += 1
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("armor equip changed unrelated progress", inspect([path])[1][0])
+
     def test_bulk_sale_consumes_full_quantity_and_keeps_clock(self):
         old = {"phase": "city", "pending": "", "steps": 7, "message": "old", "hero": {"gold": 2, "scrap": 5, "familia_id": "dawn"}}
         new = json.loads(json.dumps(old))

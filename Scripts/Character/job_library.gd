@@ -1,4 +1,5 @@
 extends RefCounted
+const Armors = preload("res://Scripts/Character/armor_library.gd")
 
 const ENTRIES := {
 	"swordsman": {"name": "剑士", "ac": 14, "attack": 5, "dex": 2, "skill": "power", "level": 1, "role": "稳健攻防 · 强攻以命中换伤害"},
@@ -8,11 +9,13 @@ const ENTRIES := {
 }
 
 static func resolve(hero: Dictionary) -> Dictionary:
-	return ENTRIES.get(hero.get("job_id", "swordsman"), ENTRIES.swordsman)
+	var job: Dictionary = ENTRIES.get(hero.get("job_id", "swordsman"), ENTRIES.swordsman).duplicate(true)
+	job.ac += Armors.bonus(hero)
+	return job
 
 static func apply(hero: Dictionary, id: String) -> void:
 	hero.job_id = id
-	for key in ["ac", "attack", "dex"]: hero[key] = ENTRIES[id][key]
+	for key in ["ac", "attack", "dex"]: hero[key] = resolve(hero)[key]
 
 static func skills(hero: Dictionary) -> Array:
 	return ["strike", resolve(hero).skill, "guard", "surge"]

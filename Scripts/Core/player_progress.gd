@@ -181,7 +181,7 @@ static func forge_event(profile_id: String, recipe: String = "iron_sword") -> St
 static func valid_forge_event(event_id: Variant) -> bool:
 	if not event_id is String: return false
 	var parts: PackedStringArray = event_id.split("/")
-	return parts.size() == 4 and parts[0] == "profile" and (parts[1] == "legacy" or (parts[1].length() == 32 and parts[1].is_valid_hex_number(false))) and parts[2] == "forge" and parts[3] in ["iron_sword", "tempered_sword"]
+	return parts.size() == 4 and parts[0] == "profile" and (parts[1] == "legacy" or (parts[1].length() == 32 and parts[1].is_valid_hex_number(false))) and parts[2] == "forge" and parts[3] in ["iron_sword", "tempered_sword", "iron_armor"]
 
 func award_forge(event_id: String, player_id: String) -> bool:
 	return _award_service("ember", event_id, player_id, valid_forge_event(event_id))

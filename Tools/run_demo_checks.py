@@ -21,6 +21,7 @@ LOG_SCENARIOS.add("test_commerce_orders")
 LOG_SCENARIOS.add("test_enemy_parties")
 LOG_SCENARIOS.add("test_pause_menu")
 LOG_SCENARIOS.add("test_bulk_trading")
+LOG_SCENARIOS.add("test_armor_equipment")
 
 
 def classify(returncode, output, require_completion=True):

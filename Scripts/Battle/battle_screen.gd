@@ -190,7 +190,7 @@ func _refresh() -> void:
 	_panel(Rect2(20, 529, 257, 170))
 	var actor: Dictionary = battle.current_unit() if battle.is_player_turn() else battle.hero
 	_label("装备 / " + str(actor.name), Rect2(36, 541, 230, 26), 17, GOLD)
-	_label("%s · 布衣\n护甲 AC %d · 命中 +%d\n剑技伤害加成 +%d" % [CharacterLibrary.weapon_name(actor), actor.ac, actor.attack, CharacterLibrary.weapon_bonus(actor)], Rect2(36, 577, 226, 70), 16)
+	_label("%s · %s\n护甲 AC %d · 命中 +%d\n剑技伤害加成 +%d" % [CharacterLibrary.weapon_name(actor), CharacterLibrary.armor_name(actor), actor.ac, actor.attack, CharacterLibrary.weapon_bonus(actor)], Rect2(36, 577, 226, 70), 16)
 	_label("生命 %d / %d" % [actor.hp, actor.max_hp], Rect2(36, 652, 225, 26), 18, Color("9fc0a0"))
 	_panel(Rect2(291, 529, 448, 170))
 	_label("技能 / " + str(Jobs.resolve(actor).name), Rect2(307, 541, 150, 24), 17, GOLD)
@@ -544,7 +544,7 @@ func _show_city() -> void:
 	_label(_party_status(), Rect2(52, 455, 370, 45), 16, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label("%s · 等级 %d" % [str(flow.profile.get("name", "角色")).left(12), hero.level], Rect2(52, 137, 370, 40), 23, GOLD)
 	city_buttons["job"] = _button("职业：%s · 查看与切换" % Jobs.resolve(hero).name, Rect2(52, 183, 365, 34), _open_jobs)
-	_label("生命 %d / %d · 经验 %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s" % [hero.hp, hero.max_hp, hero.experience, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero)], Rect2(52, 226, 365, 225), 23)
+	_label("生命 %d / %d · 经验 %d\n金币 %d\n铁片 %d\n治疗药水 %d · 灼烧药水 %d\n装备：%s\n%s · 防御 AC %d" % [hero.hp, hero.max_hp, hero.experience, hero.gold, hero.scrap, hero.potions, hero.fire_potions, CharacterLibrary.weapon_name(hero), CharacterLibrary.armor_name(hero), hero.ac], Rect2(52, 226, 365, 225), 23)
 	_panel(Rect2(468, 112, 780, 402))
 	_label(flow.run.objective_text(), Rect2(42, 72, 1190, 32), 19, GOLD)
 	_label("休整与工坊", Rect2(496, 137, 700, 40), 24, GOLD)

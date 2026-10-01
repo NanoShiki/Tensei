@@ -53,9 +53,12 @@ func _refresh() -> void:
 	var hero: Dictionary = run.character
 	var owned_names := PackedStringArray()
 	for id in hero.weapons: owned_names.append(preload("res://Scripts/Character/weapon_library.gd").ENTRIES[id].name)
-	details.text = "职业 " + str(preload("res://Scripts/Character/job_library.gd").resolve(hero).name) + "\n等级 %d · 经验 %d\n生命  %d / %d\n\n装备  %s（已装备）\n剑技伤害加成 +%d · 布衣\n\n金币  %d\n铁片  %d · 用于城市打造\n\n治疗药水  ×%d · 恢复 %d 生命\n灼烧药水  ×%d · 战斗中对敌造成 %d 伤害／可消耗 1 瓶掩护绕行" % [hero.level, hero.experience, hero.hp, hero.max_hp, Characters.weapon_name(hero), Characters.weapon_bonus(hero), hero.gold, hero.scrap, hero.potions, Abilities.ENTRIES.potion.amount, hero.fire_potions, Abilities.ENTRIES.fire_potion.amount]
+	details.text = "职业 " + str(preload("res://Scripts/Character/job_library.gd").resolve(hero).name) + "\n等级 %d · 经验 %d\n生命  %d / %d\n\n装备  %s（已装备）\n剑技伤害加成 +%d\n\n金币  %d\n铁片  %d · 用于城市打造\n\n治疗药水  ×%d · 恢复 %d 生命\n灼烧药水  ×%d · 战斗中对敌造成 %d 伤害／可消耗 1 瓶掩护绕行" % [hero.level, hero.experience, hero.hp, hero.max_hp, Characters.weapon_name(hero), Characters.weapon_bonus(hero), hero.gold, hero.scrap, hero.potions, Abilities.ENTRIES.potion.amount, hero.fire_potions, Abilities.ENTRIES.fire_potion.amount]
 	var reason: String = run.potion_reason()
 	details.text += "\n\n持有武器：" + "、".join(owned_names) + "\n城市“工坊／装备”可切换；探索中保持已装备武器。"
+	var armor_names := PackedStringArray()
+	for id in hero.armors: armor_names.append(preload("res://Scripts/Character/armor_library.gd").ENTRIES[id].name)
+	details.text += "\n\n护甲：%s · 防御 AC %d\n持有护甲：%s；城市可切换，探索中保持出发装备。" % [Characters.armor_name(hero), hero.ac, "、".join(armor_names)]
 	use_button.text = "使用治疗药水 · 恢复 %d 生命" % mini(int(Abilities.ENTRIES.potion.amount), hero.max_hp - hero.hp)
 	use_button.disabled = not reason.is_empty()
 	use_button.tooltip_text = reason if not reason.is_empty() else "消耗 1 瓶，不推进移动与刷新步数。"

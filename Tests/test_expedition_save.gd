@@ -19,7 +19,10 @@ func _initialize() -> void:
 		run.character.weapon = "iron_sword"
 		run.character.weapons.append("iron_sword")
 		run.character.player_id = "01234567890123456789012345678901"
-		run.character.forge_pending = ["profile/legacy/forge/iron_sword"]
+		run.character.armor = "iron_armor"
+		run.character.armors.append("iron_armor")
+		run.character.ac += 1
+		run.character.forge_pending = ["profile/legacy/forge/iron_sword", "profile/legacy/forge/iron_armor"]
 		run.character.commerce_done = ["supply_order"]
 		run.character.commerce_pending = ["profile/legacy/commerce/supply_order"]
 		if phase == "write": check(store.save_run(run), "独立进程写档")
