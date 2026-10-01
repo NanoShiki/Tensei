@@ -22,6 +22,7 @@ func _run() -> void:
 	create_timer(30).timeout.connect(func(): quit(1))
 	var flow = root.get_node("GameFlow")
 	flow.saves.base_path = base
+	flow.progress.base_path = base + "-shared"
 	flow.start_character("城市角色")
 	await frames()
 	var run: RefCounted = flow.run
@@ -106,6 +107,8 @@ func _run() -> void:
 	for suffix in [".0.save", ".1.save", ".tmp", ".recent.cfg"]:
 		if FileAccess.file_exists(base + suffix): DirAccess.remove_absolute(base + suffix)
 	DirAccess.remove_absolute(store.base_path + ".0.save")
+	for suffix in [".0.save", ".1.save", ".tmp"]:
+		if FileAccess.file_exists(flow.progress.base_path + suffix): DirAccess.remove_absolute(flow.progress.base_path + suffix)
 	var directory := base + ".profiles/" + profile_id
 	for name in DirAccess.get_files_at(directory): DirAccess.remove_absolute(directory + "/" + name)
 	DirAccess.remove_absolute(directory)

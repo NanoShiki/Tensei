@@ -536,7 +536,7 @@ func _show_city() -> void:
 	city_buttons["fire_potion"].disabled = hero.gold < 4
 	city_buttons["forge"] = _button("铁剑已装备" if hero.weapon == "iron_sword" else "打造并装备铁剑 · 6 金币 + 3 铁片", Rect2(496, 366, 720, 46), _city_service.bind("forge"), true)
 	city_buttons["forge"].disabled = hero.weapon == "iron_sword" or hero.gold < 6 or hero.scrap < 3
-	_label("铁剑：剑击与强攻伤害 +2。战斗胜利获得 3 金币、1 铁片。", Rect2(496, 433, 716, 58), 17, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_label("铁剑：物理伤害 +2。\n" + flow.workshop_status(), Rect2(496, 427, 716, 77), 16, MUTED).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label(flow.run.message, Rect2(42, 541, 1180, 60), 20).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	city_buttons["depart"] = _button("准备完毕 · 从第一层出发", Rect2(420, 620, 440, 58), _depart_city, true)
 

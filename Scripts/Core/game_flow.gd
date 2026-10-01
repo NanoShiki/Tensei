@@ -25,10 +25,15 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	var saved: Dictionary = saves.read_record(profile_id, record_id)
 	if saved.is_empty(): return false
 	var candidate: Dictionary = saved.run.character
-	if not candidate.familia_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != candidate.player_id):
+	if not candidate.player_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != candidate.player_id):
 		saves.message = "无法读取：共享眷族档案缺失、损坏或归属不符。请恢复同一玩家的共享备份。" + progress.message
 		Log.event("flow", "load_rejected", {"profile_id": profile_id, "record_id": record_id, "reason": saves.message}, "WARN")
 		return false
+	for event in candidate.forge_pending:
+		if event != progress.forge_event(profile_id):
+			saves.message = "无法读取：锻造贡献不属于此角色档案。"
+			Log.event("flow", "load_rejected", {"profile_id": profile_id, "record_id": record_id, "reason": saves.message}, "WARN")
+			return false
 	saved = saves.load_record(profile_id, record_id)
 	if saved.is_empty(): return false
 	run = saved.run
@@ -44,7 +49,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-factions-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-workshop-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -97,7 +102,7 @@ func familia_service(action: String) -> bool:
 	if run.phase != "city" or not run.pending.is_empty(): familia_message = "请在城市整备时调整编队。"
 	elif action in ["join", "join_ember"]:
 		success = _join_familia("dawn" if action == "join" else "ember")
-	elif hero.familia_id.is_empty() or not progress.refresh() or progress.data.get("player_id") != hero.player_id:
+	elif hero.player_id.is_empty() or not progress.refresh() or progress.data.get("player_id") != hero.player_id:
 		familia_message = "共享档案不可用或归属不符，请恢复备份。" + progress.message
 	elif action == "retry":
 		success = retry_growth()
@@ -136,9 +141,9 @@ func _join_familia(target: String) -> bool:
 	if hero.familia_id == target: familia_message = "已加入此眷族。"
 	elif not Familias.qualified(hero, target): familia_message = "加入资格：" + str(Familias.ENTRIES[target].qualification) + "。"
 	elif hero.hp <= 0: familia_message = "请先在旅店恢复主角，再调整眷族归属。"
-	elif not hero.growth_pending.is_empty(): familia_message = "请先同步待提交成长，再转会。"
-	elif hero.familia_id.is_empty() and not progress.ensure(): familia_message = progress.message
-	elif not hero.familia_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != hero.player_id): familia_message = "共享档案不可用或归属不符，请恢复备份。"
+	elif not hero.growth_pending.is_empty() or not hero.forge_pending.is_empty(): familia_message = "请先同步待提交成长与锻造贡献，再转会。"
+	elif hero.player_id.is_empty() and not progress.ensure(): familia_message = progress.message
+	elif not hero.player_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != hero.player_id): familia_message = "共享档案不可用或归属不符，请恢复备份。"
 	else:
 		hero.familia_id = target
 		hero.player_id = progress.data.player_id
@@ -152,13 +157,30 @@ func _join_familia(target: String) -> bool:
 	return false
 
 func retry_growth() -> bool:
-	if run == null or run.character.growth_pending.is_empty(): return true
+	if run == null: return true
+	var forge_ok := retry_forge()
+	var forge_message: String = progress.message
+	if run.character.growth_pending.is_empty(): return forge_ok
 	var before: Array = run.character.growth_pending.duplicate()
 	for event in before:
 		if not progress.award_victory(event.id, run.character.player_id, event.members): break
 		run.character.growth_pending.erase(event)
 	var success: bool = run.character.growth_pending.is_empty()
+	if not forge_ok and success: progress.message = forge_message
 	Log.event("familia", "sync", {"success": success, "before": before, "after": run.character.growth_pending.duplicate(), "reason": progress.message}, "INFO" if success else "WARN")
+	return success and forge_ok
+
+func retry_forge() -> bool:
+	if run == null or run.character.forge_pending.is_empty(): return true
+	var before: Array = run.character.forge_pending.duplicate()
+	for event in before:
+		if event != progress.forge_event(profile.get("id", "")):
+			progress.message = "锻造贡献不属于当前角色档案。"
+			break
+		if not progress.award_forge(event, run.character.player_id): break
+		run.character.forge_pending.erase(event)
+	var success: bool = run.character.forge_pending.is_empty()
+	Log.event("workshop", "sync", {"success": success, "before": before, "after": run.character.forge_pending.duplicate(), "reason": progress.message}, "INFO" if success else "WARN")
 	return success
 
 func settle_battle(hero: Dictionary, ally: Dictionary, victory: bool, scout: Dictionary = {}) -> bool:
@@ -187,13 +209,45 @@ func quest_service(id: String, action: String) -> bool:
 	return run.quest_service(id, action, guild_level())
 
 func city_service(action: String) -> bool:
+	if run == null: return false
+	if action == "forge": return _forge_service()
 	var member := party_companion()
 	var scout := party_companion("scout")
 	return run != null and run.city_service(action, member.get("max_hp", 0), scout.get("max_hp", 0))
 
+func _forge_service() -> bool:
+	var before: Dictionary = run.log_state()
+	var success := false
+	var event_id: String = progress.forge_event(profile.get("id", ""))
+	var hero: Dictionary = run.character
+	if run.phase != "city" or not run.pending.is_empty() or hero.weapon == "iron_sword" or hero.gold < 6 or hero.scrap < 3:
+		run.message = "请在城市准备 6 金币、3 铁片；铁剑已装备时不能重复打造。"
+	elif not progress.valid_forge_event(event_id) or not hero.forge_pending.is_empty():
+		run.message = "角色身份无效或有待同步锻造贡献，请先同步。"
+	elif hero.player_id.is_empty() and not progress.ensure(): run.message = progress.message
+	elif not hero.player_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != hero.player_id):
+		run.message = "共享档案不可用或归属不符，请恢复备份后打造。" + progress.message
+	else:
+		if run.city_service("forge"):
+			hero.player_id = progress.data.player_id
+			hero.forge_pending.append(event_id)
+			success = true
+			if retry_forge(): run.message += " 炉心贡献已同步（同角色同配方只计一次）。"
+			else: run.message += " 炉心贡献待同步，请保存当前记录；恢复存储后重试。"
+			active_character = hero.duplicate(true)
+	Log.event("workshop", "craft", {"id": event_id, "success": success, "reason": run.message, "before": before, "after": run.log_state(), "player_id": progress.data.get("player_id", "")}, "INFO" if success else "WARN")
+	return success
+
 func guild_level() -> int:
 	if run == null or run.character.familia_id.is_empty() or not progress.refresh() or progress.data.get("player_id") != run.character.player_id: return 0
 	return progress.guild_level(run.character.familia_id)
+
+func workshop_status() -> String:
+	if run == null: return ""
+	var hero: Dictionary = run.character
+	if hero.player_id.is_empty(): return "炉心工坊：实际打造 +1 共享贡献，无需加入；同角色同配方只计一次。"
+	if not progress.refresh() or progress.data.get("player_id") != hero.player_id: return "炉心共享档案不可用，请恢复同一玩家备份。"
+	return "炉心等级 %d · 贡献 %d · 待同步 %d；实际打造 +1，同角色同配方只计一次。" % [progress.guild_level("ember"), progress.data.familias.ember.contribution, hero.forge_pending.size()]
 
 func _change_scene(path: String) -> void:
 	if not _pending_scene.is_empty(): return
