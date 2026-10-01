@@ -387,6 +387,41 @@ func equip_weapon(id: String) -> bool:
 	Log.event("inventory", "equip", {"id": id, "success": success, "before": before, "after": log_state()}, "INFO" if success else "WARN")
 	return success
 
+func station_reason(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0) -> String:
+	if phase not in ["descending", "returning"] or floor_number != 5 or current != "entry" or not pending.is_empty() or failed or not has_living_party(): return "请在第五层入口、战斗结束后使用休整站。"
+	if action not in ["rest", "potion", "fire_potion"]: return "未知休整站服务。"
+	var cost: int = {"rest": 8, "potion": 5, "fire_potion": 7}[action]
+	if character.gold < cost: return "需要 %d 金币。" % cost
+	if action == "rest":
+		if (character.party_enlisted and not PlayerProgress.valid_hp_limit(companion_max_hp)) or (character.scout_enlisted and not PlayerProgress.valid_hp_limit(scout_max_hp, "scout")): return "队友共享档案不可用，请恢复同一玩家备份后休整。"
+		var hurt: bool = character.hp > 0 and character.hp < character.max_hp
+		if character.party_enlisted and character.party_hp > 0 and character.party_hp < companion_max_hp: hurt = true
+		if character.scout_enlisted and character.scout_hp > 0 and character.scout_hp < scout_max_hp: hurt = true
+		if not hurt: return "存活成员均满血；休整不能复活倒下成员。"
+	return ""
+
+func station_service(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0) -> bool:
+	var before := log_state()
+	var reason := station_reason(action, companion_max_hp, scout_max_hp)
+	var success := reason.is_empty()
+	if success:
+		character.gold -= {"rest": 8, "potion": 5, "fire_potion": 7}[action]
+		match action:
+			"rest":
+				if character.hp > 0: character.hp = mini(character.max_hp, character.hp + 12)
+				if character.party_enlisted and character.party_hp > 0: character.party_hp = mini(companion_max_hp, character.party_hp + 12)
+				if character.scout_enlisted and character.scout_hp > 0: character.scout_hp = mini(scout_max_hp, character.scout_hp + 12)
+				message = "休整站：花费 8 金币，所有存活成员恢复至多 12 生命；倒下成员请回城复活。"
+			"potion":
+				character.potions += 1
+				message = "休整站：花费 5 金币，购买一瓶治疗药水。"
+			"fire_potion":
+				character.fire_potions += 1
+				message = "休整站：花费 7 金币，购买一瓶灼烧药水。"
+	else: message = reason
+	Log.event("station", "service", {"action": action, "success": success, "reason": reason, "companion_max_hp": companion_max_hp, "scout_max_hp": scout_max_hp, "before": before, "after": log_state()}, "INFO" if success else "WARN")
+	return success
+
 func depart_city(next_seed: int) -> bool:
 	var before := log_state()
 	var result := _depart_city(next_seed)

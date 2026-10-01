@@ -50,7 +50,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-equipment-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-station-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -224,6 +224,24 @@ func forge_reason(recipe_id: String = "iron_sword") -> String:
 func equip_weapon(id: String) -> bool:
 	if run == null: return false
 	var success: bool = run.equip_weapon(id)
+	if success: active_character = run.character.duplicate(true)
+	return success
+
+func _station_limits(action: String) -> Array:
+	if run == null or action != "rest": return [0, 0]
+	if run.character.party_enlisted or run.character.scout_enlisted:
+		if not progress.refresh() or progress.data.get("player_id") != run.character.player_id: return [0, 0]
+	return [party_companion().get("max_hp", 0), party_companion("scout").get("max_hp", 0)]
+
+func station_reason(action: String) -> String:
+	if run == null: return "请先开始探索。"
+	var limits := _station_limits(action)
+	return run.station_reason(action, limits[0], limits[1])
+
+func station_service(action: String) -> bool:
+	if run == null: return false
+	var limits := _station_limits(action)
+	var success: bool = run.station_service(action, limits[0], limits[1])
 	if success: active_character = run.character.duplicate(true)
 	return success
 

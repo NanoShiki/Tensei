@@ -150,6 +150,31 @@ def inspect(paths):
                         if data["success"]: assert not data["after"], "successful forge sync still pending"
                 except (KeyError, TypeError, AssertionError) as exc:
                     errors.append(label + ": " + str(exc))
+            if row["category"] == "station" and row["event"] == "service":
+                try:
+                    old, new = data["before"], data["after"]
+                    expected = json.loads(json.dumps(old))
+                    expected["message"] = new["message"]
+                    if data["success"]:
+                        assert old["phase"] in ("descending", "returning") and old["floor"] == 5 and old["node"] == "entry" and not old["pending"], "station location"
+                        hero = old["hero"]
+                        cost = {"rest": 8, "potion": 5, "fire_potion": 7}[data["action"]]
+                        assert hero["gold"] >= cost, "station funds"
+                        expected["hero"]["gold"] -= cost
+                        if data["action"] == "rest":
+                            hurt = False
+                            for hp, maximum, enlisted in (("hp", hero["max_hp"], True), ("party_hp", data["companion_max_hp"], hero["party_enlisted"]), ("scout_hp", data["scout_max_hp"], hero["scout_enlisted"])):
+                                if enlisted and hero[hp] > 0:
+                                    assert maximum >= hero[hp], "station member maximum"
+                                    hurt |= hero[hp] < maximum
+                                    expected["hero"][hp] = min(maximum, hero[hp] + 12)
+                            assert hurt, "station charged full health party"
+                        else:
+                            stock = "potions" if data["action"] == "potion" else "fire_potions"
+                            expected["hero"][stock] += 1
+                    assert expected == new, "station changed unrelated progress or revived member"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "inventory" and row["event"] == "equip":
                 try:
                     old, new = data["before"], data["after"]
