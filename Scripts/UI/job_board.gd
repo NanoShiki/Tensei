@@ -64,11 +64,13 @@ func _refresh() -> void:
 	buttons.clear()
 	var hero: Dictionary = run.character
 	for id in Jobs.ENTRIES:
-		var job: Dictionary = Jobs.ENTRIES[id]
+		var candidate := hero.duplicate(true)
+		candidate.job_id = id
+		var job: Dictionary = Jobs.resolve(candidate)
 		var skill: Dictionary = Abilities.ENTRIES[job.skill]
 		_text("%s · %s\n防御 %d · 命中 +%d · 敏捷 +%d\n%s：%s\n技能条件：等级 %d（当前等级 %d）" % [job.name, job.role, job.ac, job.attack, job.dex, skill.name, skill.hint, job.level, hero.level])
 		_button(id, "当前职业" if hero.job_id == id else "选择%s · 免费" % job.name, hero.job_id == id)
-	feedback.text = "Demo 可在城市免费切换。职业仅改变命中、防御、敏捷和第二技能；等级、生命、装备、个人任务与眷族保留，选择后需手动保存。"
+	feedback.text = "Demo 可在城市免费切换，显示防御含当前护甲加值。职业改变命中、基础防御、敏捷和第二技能；等级、生命、装备、个人任务与眷族保留，选择后需手动保存。"
 
 func _act(id: String) -> void:
 	if run.job_service(id):
