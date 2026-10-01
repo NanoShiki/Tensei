@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LOG_SCENARIOS = {"test_city_loop", "test_inventory", "test_stage_boss", "test_quests_growth", "test_depth_goal", "test_gm_recovery", "test_encounter_choice", "test_party_combat", "test_party_expedition", "test_three_party", "test_jobs", "test_enemy_variety", "test_familia_quests", "test_familia_transfer", "test_forge_growth", "test_member_workshop"}
 LOG_SCENARIOS.add("test_rest_station")
 LOG_SCENARIOS.add("test_commerce_orders")
+LOG_SCENARIOS.add("test_enemy_parties")
 
 
 def classify(returncode, output, require_completion=True):

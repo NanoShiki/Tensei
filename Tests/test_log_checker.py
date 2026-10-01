@@ -8,6 +8,19 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_victory_requires_all_enemies_downed(self):
+        state = {"hero": {"hp": 20, "max_hp": 36}, "enemy": {"hp": 0, "max_hp": 29},
+                 "enemy_b": {"hp": 8, "max_hp": 25}, "actions": 1, "outcome": "victory"}
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "battle", "event": "gm_kill_enemy",
+               "data": {"success": True, "before": json.loads(json.dumps(state)), "after": state}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("victory with living enemy", inspect([path])[1][0])
+            state["enemy_b"]["hp"] = 0
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+
     def test_commerce_delivery_preserves_membership_and_clock(self):
         old = {"phase": "city", "pending": "", "steps": 7, "message": "old", "hero": {"gold": 1, "scrap": 2, "potions": 3,
             "player_id": "test", "familia_id": "dawn", "commerce_done": [], "commerce_pending": []}}

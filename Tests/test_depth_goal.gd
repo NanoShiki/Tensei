@@ -85,7 +85,10 @@ func _run() -> void:
 	check(not flow.run.quest_service("depth_five", "claim"), "探索途中禁止领奖")
 	flow.run.enter("1a")
 	current_scene.start_encounter()
-	await create_timer(1.5).timeout
+	for i in range(30):
+		if not current_scene.busy: break
+		await create_timer(0.1).timeout
+	check(not current_scene.busy, "等待所有敌人动作完成再执行 GM")
 	check(current_scene.gm_kill_enemy(), "真实GM走普通结算")
 	reach(flow, 5)
 	check(flow.run.character.depth_goal == 5 and "返回城市" in flow.run.objective_text(), "抵达第五层提示回城领奖")

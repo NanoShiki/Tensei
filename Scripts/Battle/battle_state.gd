@@ -8,6 +8,7 @@ const Enemies = preload("res://Scripts/Battle/enemy_library.gd")
 var battle_id := ""
 var hero: Dictionary
 var enemy: Dictionary
+var enemy_b: Dictionary = {}
 var ally: Dictionary = {}
 var ally_guarding := false
 var scout: Dictionary = {}
@@ -23,7 +24,7 @@ var logs: Array[String] = []
 var last_event: Dictionary = {}
 var charging := false
 
-func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1, captain: bool = false, companion: Dictionary = {}, enemy_kind: String = "goblin", second_companion: Dictionary = {}) -> void:
+func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1, captain: bool = false, companion: Dictionary = {}, enemy_kind: String = "goblin", second_companion: Dictionary = {}, second_enemy_kind: String = "") -> void:
 	battle_id = Crypto.new().generate_random_bytes(8).hex_encode()
 	hero = character.duplicate(true)
 	hero["surge"] = 1
@@ -34,6 +35,10 @@ func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1, c
 	if not scout.is_empty(): scout["surge"] = 1
 	scout_guarding = false
 	enemy = Enemies.resolve("captain" if captain else enemy_kind, floor_number)
+	enemy_b = {}
+	if Enemies.ENTRIES.has(second_enemy_kind) and second_enemy_kind != "captain" and not enemy.captain:
+		enemy_b = Enemies.resolve(second_enemy_kind, floor_number)
+		enemy_b.id = "goblin_b"
 	charging = false
 	if seed_value < 0:
 		rng.randomize()
@@ -50,29 +55,28 @@ func setup(character: Dictionary, floor_number: int = 1, seed_value: int = -1, c
 	var e := rng.randi_range(1, 20) + int(enemy.dex)
 	order.assign(["lorn", "goblin"] if h >= e else ["goblin", "lorn"])
 	logs.append("先攻：洛恩 %d / %s %d。" % [h, enemy.name, e])
-	var a := 0
+	var initiative := [{"id": "lorn", "roll": h, "tie": 0}, {"id": "goblin", "roll": e, "tie": 3}]
 	if not ally.is_empty():
-		a = rng.randi_range(1, 20) + int(ally.dex)
-		var initiative := [{"id": "lorn", "roll": h, "tie": 0}, {"id": "squire", "roll": a, "tie": 1}, {"id": "goblin", "roll": e, "tie": 2}]
-		initiative.sort_custom(func(left: Dictionary, right: Dictionary): return left.roll > right.roll or (left.roll == right.roll and left.tie < right.tie))
-		order.clear()
-		for item in initiative: order.append(item.id)
+		var a := rng.randi_range(1, 20) + int(ally.dex)
+		initiative.append({"id": "squire", "roll": a, "tie": 1})
 		logs.append("先攻：见习卫士 %d。" % a)
 	if not scout.is_empty():
-		var initiative := [{"id": "lorn", "roll": h, "tie": 0}, {"id": "goblin", "roll": e, "tie": 3}]
-		if not ally.is_empty(): initiative.append({"id": "squire", "roll": a, "tie": 1})
 		var s := rng.randi_range(1, 20) + int(scout.dex)
 		initiative.append({"id": "scout", "roll": s, "tie": 2})
-		initiative.sort_custom(func(left: Dictionary, right: Dictionary): return left.roll > right.roll or (left.roll == right.roll and left.tie < right.tie))
-		order.clear()
-		for item in initiative: order.append(item.id)
 		logs.append("先攻：见习游侠 %d。" % s)
+	if not enemy_b.is_empty():
+		var b := rng.randi_range(1, 20) + int(enemy_b.dex)
+		initiative.append({"id": "goblin_b", "roll": b, "tie": 4})
+		logs.append("先攻：%s %d。" % [enemy_b.name, b])
+	initiative.sort_custom(func(left: Dictionary, right: Dictionary): return left.roll > right.roll or (left.roll == right.roll and left.tie < right.tie))
+	order.clear()
+	for item in initiative: order.append(item.id)
 	_check_outcome()
 	if outcome == "ongoing" and unit(current_id()).hp <= 0: _advance()
 	Log.event("battle", "start", {"seed": str(rng.seed), "order": order, "state": log_state()})
 
 func log_state() -> Dictionary:
-	return {"battle_id": battle_id, "hero": hero.duplicate(true), "enemy": enemy.duplicate(true), "round": round_number,
+	return {"battle_id": battle_id, "hero": hero.duplicate(true), "enemy": enemy.duplicate(true), "enemy_b": enemy_b.duplicate(true), "round": round_number,
 		"actor": current_id(), "actions": action, "guarding": guarding, "outcome": outcome, "charging": charging,
 		"last_event": last_event.duplicate(true), "ally": ally.duplicate(true), "ally_guarding": ally_guarding, "scout": scout.duplicate(true), "scout_guarding": scout_guarding}
 
@@ -93,9 +97,9 @@ func reason(id: String) -> String:
 	if id == "potion" and not can_target("potion", "lorn") and not can_target("potion", "squire") and not can_target("potion", "scout"): return "没有可治疗的存活成员"
 	return ""
 
-func hit_chance(id: String) -> int:
+func hit_chance(id: String, target: String = "goblin") -> int:
 	var modifier := int(current_unit().attack) - int(Abilities.ENTRIES[id].get("penalty", 0))
-	return clampi(21 + modifier - int(enemy.ac), 1, 19) * 5
+	return clampi(21 + modifier - int(unit(target).ac), 1, 19) * 5
 
 func use_ability(id: String, target: String) -> bool:
 	var before := log_state()
@@ -122,7 +126,7 @@ func _use_ability(id: String, target: String) -> bool:
 		logs.append("%s → %s：%s 生命。" % [entry.name, receiver.name, text])
 		last_event = {"actor": actor.id, "target": receiver.id, "text": text}
 	elif entry.target == "enemy":
-		_attack(actor, enemy, int(entry.die), int(entry.bonus) + (CharacterLibrary.weapon_bonus(actor) if entry.get("weapon_bonus", true) else 0), int(entry.get("penalty", 0)))
+		_attack(actor, unit(target), int(entry.die), int(entry.bonus) + (CharacterLibrary.weapon_bonus(actor) if entry.get("weapon_bonus", true) else 0), int(entry.get("penalty", 0)))
 	elif id == "guard":
 		if actor.id == "lorn": guarding = true
 		elif actor.id == "squire": ally_guarding = true
@@ -182,8 +186,9 @@ func enemy_turn() -> bool:
 	return result
 
 func _enemy_turn() -> bool:
-	if current_id() != "goblin": return false
-	if enemy.captain and not charging:
+	if not is_enemy_turn(): return false
+	var attacker := current_unit()
+	if attacker.captain and not charging:
 		charging = true
 		logs.append("守关队长正在蓄力，下次行动将释放重击。")
 		last_event = {"actor": "goblin", "target": "goblin", "text": "蓄力 · 下次重击"}
@@ -195,13 +200,14 @@ func _enemy_turn() -> bool:
 			for friend in friends():
 				if friend.hp > 0: living.append(friend)
 			recipient = living[rng.randi_range(0, living.size() - 1)] if living.size() > 1 else living[0]
-		_attack(enemy, recipient, enemy.die, enemy.bonus, 0, enemy.advantage)
+		_attack(attacker, recipient, attacker.die, attacker.bonus, 0, attacker.advantage)
 		charging = false
 	_check_outcome()
 	if outcome == "ongoing": _advance()
 	return true
 
 func enemy_intent() -> String:
+	if not enemy_b.is_empty(): return "双敌遭遇：每名敌人独立行动，清除全部敌人才获胜。"
 	if enemy.get("content_id") in ["armored", "prowler"]: return "敌方意图：" + str(Enemies.ENTRIES[enemy.content_id].threat)
 	if not enemy.get("captain", false): return ""
 	return ("敌方意图：重击 · 随机攻击存活成员；闪避仅保护自身" if not ally.is_empty() or not scout.is_empty() else "敌方意图：重击 · 命中 +4 · 1d10+4；可用闪避应对") if charging else "敌方意图：蓄力 · 本次不攻击，下次行动重击"
@@ -220,7 +226,7 @@ func _advance() -> void:
 		else: scout_guarding = false
 
 func _check_outcome() -> void:
-	if enemy.hp <= 0: outcome = "victory"
+	if enemy.hp <= 0 and (enemy_b.is_empty() or enemy_b.hp <= 0): outcome = "victory"
 	elif hero.hp <= 0 and (ally.is_empty() or ally.hp <= 0) and (scout.is_empty() or scout.hp <= 0): outcome = "defeat"
 
 func gm_kill_enemy() -> bool:
@@ -232,7 +238,8 @@ func gm_kill_enemy() -> bool:
 func _gm_kill_enemy() -> bool:
 	if outcome != "ongoing": return false
 	enemy.hp = 0
-	logs.append("GM：秒杀当前敌人。")
+	if not enemy_b.is_empty(): enemy_b.hp = 0
+	logs.append("GM：秒杀当前全部敌人。")
 	last_event = {"actor": "gm", "target": enemy.id, "text": "GM 秒杀"}
 	_check_outcome()
 	return true
@@ -245,6 +252,7 @@ func grant_actions(amount: int) -> void:
 func unit(id: String) -> Dictionary:
 	if id == "lorn": return hero
 	if id == "goblin": return enemy
+	if id == "goblin_b": return enemy_b
 	if id == "squire": return ally
 	if id == "scout": return scout
 	return {}
@@ -255,12 +263,15 @@ func current_unit() -> Dictionary:
 func is_player_turn() -> bool:
 	return current_id() in ["lorn", "squire", "scout"]
 
+func is_enemy_turn() -> bool:
+	return current_id() in ["goblin", "goblin_b"]
+
 func can_target(id: String, target_id: String) -> bool:
 	if not Abilities.ENTRIES.has(id) or not is_player_turn() or not Jobs.reason(current_unit(), id).is_empty(): return false
 	var receiver := unit(target_id)
 	if receiver.is_empty() or receiver.hp <= 0: return false
 	if id == "potion": return target_id in ["lorn", "squire", "scout"] and receiver.hp < receiver.max_hp
-	return target_id == ("goblin" if Abilities.ENTRIES[id].target == "enemy" else current_id())
+	return target_id in ["goblin", "goblin_b"] if Abilities.ENTRIES[id].target == "enemy" else target_id == current_id()
 
 static func practice_companion() -> Dictionary:
 	return {"id": "squire", "name": "见习卫士", "hp": 28, "max_hp": 28, "ac": 13, "attack": 4, "dex": 1, "surge": 1, "weapon": "training_sword"}
