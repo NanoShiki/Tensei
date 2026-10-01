@@ -16,6 +16,7 @@ var continue_button: Button
 var load_button: Button
 var start_button: Button
 var settings_button: Button
+var guide_button: Button
 var modal: PanelContainer
 var modal_shade: ColorRect
 var last_focus: Control
@@ -122,6 +123,7 @@ func _build_menu() -> void:
 	caption = _label("", 16)
 	caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(caption)
+	guide_button = _button("试玩指南 · F1", _open_guide, self)
 
 func _refresh_continue() -> void:
 	var flow := get_node("/root/GameFlow")
@@ -158,6 +160,8 @@ func _layout() -> void:
 	status.position = Vector2(size.x * 0.075, size.y - 42)
 	caption.position = Vector2(size.x - 315, size.y - 65)
 	caption.size = Vector2(265, 45)
+	guide_button.position = Vector2(size.x - 188, 18)
+	guide_button.size = Vector2(170, 42)
 	if is_instance_valid(modal):
 		modal.size.x = minf(520, size.x - 48)
 		modal.reset_size()
@@ -169,6 +173,16 @@ func apply_character_portrait(latest_character: Dictionary = {}) -> void:
 	background.texture = entry["texture"]
 	caption.text = "%s  /  %s" % [entry["name"], entry["stage"]]
 
+
+func _open_guide() -> void:
+	if is_instance_valid(modal): return
+	for child in get_children():
+		if child is Window and child.visible: return
+	var guide := preload("res://Scripts/UI/demo_guide.gd").new()
+	add_child(guide)
+	guide.open()
+	guide.tree_exited.connect(func():
+		if is_instance_valid(guide_button): guide_button.grab_focus())
 
 func _open_modal(title: String) -> VBoxContainer:
 	last_focus = get_viewport().gui_get_focus_owner()
@@ -285,6 +299,10 @@ func _open_quit() -> void:
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		_open_guide()
+		get_viewport().set_input_as_handled()
+		return
 	if event.is_action_pressed("ui_cancel") and is_instance_valid(modal):
 		_close_modal()
 		get_viewport().set_input_as_handled()

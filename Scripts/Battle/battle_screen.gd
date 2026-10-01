@@ -141,6 +141,7 @@ func _refresh() -> void:
 	var floor_number: int = flow.run.floor_number if flow != null and flow.run != null else 1
 	_label("T E N S E I   /   地下城", Rect2(28, 16, 350, 28), 18, GOLD)
 	_label("第 %02d 层   ·   苔石回廊" % floor_number, Rect2(28, 49, 340, 24), 14, MUTED)
+	_button("指南 · F1", Rect2(340, 40, 120, 33), _open_guide)
 	_label("第 %d 轮" % battle.round_number, Rect2(470, 12, 80, 24), 16, GOLD)
 	var stride := 122 if battle.order.size() == 4 else 152
 	var slot_width := 108 if battle.order.size() == 4 else 138
@@ -400,6 +401,7 @@ func show_floor_map() -> void:
 		_show_return_summary()
 		return
 	_label("地 下 城   /   路 线", Rect2(32, 18, 450, 42), 25, GOLD)
+	_button("指南 · F1", Rect2(330, 22, 135, 40), _open_guide)
 	_label("第 %02d / %02d 层" % [run.floor_number, run.total_floors], Rect2(500, 20, 210, 40), 25)
 	_button("背包 · B", Rect2(720, 22, 135, 40), _open_inventory)
 	_button("放弃并回主菜单", Rect2(1060, 22, 190, 40), _return_to_menu)
@@ -512,6 +514,7 @@ func _enter_city() -> void:
 func _show_city() -> void:
 	var hero: Dictionary = flow.run.character
 	_label("城 市   /   整 备", Rect2(32, 18, 350, 42), 25, GOLD)
+	_button("指南 · F1", Rect2(260, 22, 135, 40), _open_guide)
 	city_buttons["familia"] = _button("眷族／编队", Rect2(420, 22, 135, 40), _open_familia)
 	city_buttons["quests"] = _button("委托", Rect2(570, 22, 135, 40), _open_quests)
 	_button("背包 · B", Rect2(720, 22, 135, 40), _open_inventory)
@@ -568,6 +571,12 @@ func _open_inventory() -> void:
 func _input(event: InputEvent) -> void:
 	var gm := get_tree().get_first_node_in_group("gm_panel")
 	if gm != null and gm.is_open(): return
+	for child in get_children():
+		if child is Window and child.visible: return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		_open_guide()
+		get_viewport().set_input_as_handled()
+		return
 	if is_instance_valid(inventory): return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_B:
 		_open_inventory()
@@ -603,6 +612,15 @@ func _choose_node(id: String, return_key: String) -> void:
 func _move_choice(id: String, return_key: String, avoid: bool) -> void:
 	if return_key.is_empty(): _enter_node(id, avoid)
 	else: _return_step(return_key, avoid)
+
+func _open_guide() -> void:
+	if busy: return
+	for child in get_children():
+		if child is Window and child.visible: return
+	var guide := preload("res://Scripts/UI/demo_guide.gd").new()
+	add_child(guide)
+	var run: RefCounted = flow.run if flow != null and flow.run != null else null
+	guide.open(run, flow.guild_level() if run != null else 0)
 
 func _open_jobs() -> void:
 	if not _can_open_city_board(): return
