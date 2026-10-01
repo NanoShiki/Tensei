@@ -8,6 +8,21 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_station_heals_living_members_without_advancing_clock(self):
+        old = {"phase": "descending", "floor": 5, "node": "entry", "pending": "", "steps": 17, "respawn": {"a": 2}, "message": "old",
+            "hero": {"hp": 5, "max_hp": 36, "party_enlisted": True, "party_hp": 0, "scout_enlisted": True, "scout_hp": 5, "gold": 8}}
+        new = json.loads(json.dumps(old))
+        new["hero"].update(hp=17, scout_hp=17, gold=0)
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "station", "event": "service",
+            "data": {"action": "rest", "success": True, "companion_max_hp": 28, "scout_max_hp": 22, "before": old, "after": new}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            new["hero"]["party_hp"] = 12
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("station changed unrelated progress or revived member", inspect([path])[1][0])
+
     def test_equipment_switch_preserves_resources_and_clock(self):
         old = {"phase": "city", "pending": "", "steps": 7, "respawn": {"a": 2}, "message": "old",
             "hero": {"weapon": "iron_sword", "weapons": ["training_sword", "iron_sword"], "gold": 6}}

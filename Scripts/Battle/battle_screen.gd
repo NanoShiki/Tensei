@@ -423,6 +423,10 @@ func show_floor_map() -> void:
 		expedition_button = _button("进入第 %d 层" % (run.floor_number + 1), Rect2(880, 144, 350, 42), _descend_floor.bind(int(run.floor_number)), true)
 	else:
 		expedition_button = direction_button
+	if run.floor_number == 5:
+		map_buttons["station"] = _button("入口休整站", Rect2(40, 242, 180, 42), _open_station)
+		map_buttons.station.disabled = run.current != "entry" or not run.pending.is_empty()
+		map_buttons.station.tooltip_text = "回到第五层入口可付费休整和购买途中补给；不会推进移动和刷新。"
 	for item in run.nodes:
 		for next_id in item.next:
 			var line := Line2D.new()
@@ -442,6 +446,7 @@ func show_floor_map() -> void:
 		var position_text := "当前" if item.id == run.current else ("可返回" if return_here else ("可深入" if run.can_enter(item.id) else ""))
 		var visit_text := "已到访" if item.visited else "未到访"
 		var status: String = names[item.kind]
+		if item.kind == "entry" and run.floor_number == 5: status = "入口／休整站"
 		if item.kind == "battle":
 			status = str(Enemies.ENTRIES[item.enemy_kind].name) if item.enemy_active else "刷新还需 %d 步" % item.respawn_in
 		elif item.kind == "rest" and item.reward_claimed: status = "营地 · 已休整"
@@ -553,6 +558,15 @@ func _open_equipment() -> void:
 	add_child(panel)
 	panel.changed.connect(show_floor_map)
 	panel.open(flow)
+
+func _open_station() -> void:
+	if flow == null or flow.run == null or flow.run.floor_number != 5 or flow.run.current != "entry" or not flow.run.pending.is_empty() or flow.run.phase not in ["descending", "returning"]: return
+	for child in get_children():
+		if child is Window and child.visible: return
+	var station := preload("res://Scripts/UI/rest_station.gd").new()
+	add_child(station)
+	station.changed.connect(show_floor_map)
+	station.open(flow)
 
 func _depart_city() -> void:
 	if flow.run.depart_city(randi()): show_floor_map()
