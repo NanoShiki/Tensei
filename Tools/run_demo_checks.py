@@ -19,6 +19,7 @@ LOG_SCENARIOS = {"test_city_loop", "test_inventory", "test_stage_boss", "test_qu
 LOG_SCENARIOS.add("test_rest_station")
 LOG_SCENARIOS.add("test_commerce_orders")
 LOG_SCENARIOS.add("test_enemy_parties")
+LOG_SCENARIOS.add("test_pause_menu")
 
 
 def classify(returncode, output, require_completion=True):

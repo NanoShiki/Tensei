@@ -8,6 +8,18 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_pause_keeps_actions_resources_and_rng(self):
+        state = {"scope": "battle", "rng": "123", "busy": True, "battle": {"actions": 0, "hero": {"hp": 20, "potions": 2}}}
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "pause", "event": "resume",
+               "data": {"before": state, "after": json.loads(json.dumps(state))}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            row["data"]["after"]["rng"] = "124"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("pause changed gameplay or RNG", inspect([path])[1][0])
+
     def test_victory_requires_all_enemies_downed(self):
         state = {"hero": {"hp": 20, "max_hp": 36}, "enemy": {"hp": 0, "max_hp": 29},
                  "enemy_b": {"hp": 8, "max_hp": 25}, "actions": 1, "outcome": "victory"}

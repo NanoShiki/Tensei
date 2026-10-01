@@ -39,6 +39,9 @@ def inspect(paths):
             if row["level"] == "ERROR":
                 errors.append(label + ": " + str(row["data"].get("message", row["data"])))
             data = row["data"]
+            if row["category"] == "pause" and row["event"] in ("resume", "menu", "closed"):
+                if data.get("before") != data.get("after"):
+                    errors.append(label + ": pause changed gameplay or RNG")
             if row["category"] == "battle" and row["event"] == "attack" and "rolls" in data:
                 try:
                     rolls = data["rolls"]
