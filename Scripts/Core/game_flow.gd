@@ -9,6 +9,8 @@ const Commerce = preload("res://Scripts/Character/commerce_library.gd")
 const Armors = preload("res://Scripts/Character/armor_library.gd")
 const MENU_SCENE := "res://Scenes/UI/main_menu.tscn"
 const BATTLE_SCENE := "res://Scenes/Battle/battle.tscn"
+const Training = preload("res://Scripts/Battle/training_library.gd")
+var training_config: Dictionary = {}
 var active_character: Dictionary = {}
 var run: RefCounted
 var show_map := false
@@ -44,6 +46,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 			return false
 	saved = saves.load_record(profile_id, record_id)
 	if saved.is_empty(): return false
+	training_config = {}
 	run = saved.run
 	profile = saved.metadata.profile.duplicate(true)
 	active_record_id = record_id
@@ -57,7 +60,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-armor-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-training-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -67,13 +70,32 @@ func _exit_tree() -> void:
 	Log.close()
 
 func start_battle(character_id: String) -> void:
+	training_config = {}
 	Log.context = {"mode": "battle_demo"}
 	run = null
 	show_map = false
 	active_character = CharacterLibrary.resolve(character_id)
 	_change_scene(BATTLE_SCENE)
 
+func start_training(config: Dictionary) -> bool:
+	var scene := get_tree().current_scene
+	var allowed: bool = not get_tree().paused and _pending_scene.is_empty() and (scene == null or scene.scene_file_path == MENU_SCENE or (run == null and scene.is_in_group("gm_battle_context") and not scene.busy))
+	if not allowed or not Training.valid(config):
+		Log.event("training", "rejected", {"reason": "invalid configuration or context"}, "WARN")
+		return false
+	training_config = config.duplicate(true)
+	run = null
+	show_map = false
+	active_character = Training.hero(training_config)
+	profile = {}
+	active_record_id = ""
+	Log.context = {"mode": "training"}
+	Log.event("training", "configured", {"config": training_config, "hero": active_character, "shared": progress.data.duplicate(true)})
+	_change_scene(BATTLE_SCENE)
+	return true
+
 func start_exploration(profile_name: String = "洛恩") -> void:
+	training_config = {}
 	run = FloorRun.new()
 	run.setup(randi())
 	profile = saves.new_profile(profile_name)

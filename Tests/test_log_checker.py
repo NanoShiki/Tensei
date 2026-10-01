@@ -8,6 +8,17 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_training_victory_has_no_expedition_loot(self):
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "training", "event": "finished",
+               "data": {"battle": {"hero": {"gold": 0, "scrap": 0}}}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            row["data"]["battle"]["hero"]["scrap"] = 1
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("training granted expedition loot", inspect([path])[1][0])
+
     def test_armor_equip_changes_only_armor_and_defense(self):
         old = {"phase": "city", "pending": "", "steps": 7, "message": "old", "hero": {"hp": 20, "ac": 14, "armor": "cloth_armor", "armors": ["cloth_armor", "iron_armor"]}}
         new = json.loads(json.dumps(old))

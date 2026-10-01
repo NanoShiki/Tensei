@@ -1,5 +1,6 @@
 extends Control
 
+const Training = preload("res://Scripts/Battle/training_library.gd")
 const BattleState = preload("res://Scripts/Battle/battle_state.gd")
 const Abilities = preload("res://Scripts/Battle/ability_library.gd")
 const Enemies = preload("res://Scripts/Battle/enemy_library.gd")
@@ -134,7 +135,16 @@ func start_encounter() -> void:
 			character = flow.run.character
 			floor_number = flow.run.floor_number
 	var encounter: Dictionary = flow.run.node(flow.run.pending) if flow != null and flow.run != null else {}
-	battle.setup(character, floor_number, -1, flow != null and flow.run != null and flow.run.is_captain_node(flow.run.pending), BattleState.practice_companion() if party_practice else (flow.party_companion() if flow != null and flow.run != null else {}), str(encounter.get("enemy_kind", "goblin")), flow.party_companion("scout") if flow != null and flow.run != null else {}, str(encounter.get("second_enemy_kind", "")))
+	if flow != null and flow.run == null and not flow.training_config.is_empty():
+		var config: Dictionary = flow.training_config
+		character = Training.hero(config)
+		flow.active_character = character.duplicate(true)
+		var kind: String = "armored" if config.enemy == "pair" else config.enemy
+		battle.setup(character, config.floor, config.seed, kind == "captain", Training.companion(config, "squire"), kind, Training.companion(config, "scout"), "goblin" if config.enemy == "pair" else "")
+	else:
+		battle.setup(character, floor_number, -1, flow != null and flow.run != null and flow.run.is_captain_node(flow.run.pending), BattleState.practice_companion() if party_practice else (flow.party_companion() if flow != null and flow.run != null else {}), str(encounter.get("enemy_kind", "goblin")), flow.party_companion("scout") if flow != null and flow.run != null else {}, str(encounter.get("second_enemy_kind", "")))
+	if flow != null and flow.run == null and not flow.training_config.is_empty():
+		preload("res://Scripts/Core/game_log.gd").event("training", "started", {"config": flow.training_config.duplicate(true), "battle": battle.log_state(), "rng": str(battle.rng.state)})
 	_refresh()
 	_drive_enemy()
 
@@ -143,7 +153,7 @@ func _refresh() -> void:
 	_backdrop()
 	var floor_number: int = flow.run.floor_number if flow != null and flow.run != null else 1
 	_label("T E N S E I   /   地下城", Rect2(28, 16, 350, 28), 18, GOLD)
-	_label("第 %02d 层   ·   苔石回廊" % floor_number, Rect2(28, 49, 340, 24), 14, MUTED)
+	_label(("演练 · 第 %02d 层参数" if flow != null and flow.run == null else "第 %02d 层   ·   苔石回廊") % (flow.training_config.floor if flow != null and not flow.training_config.is_empty() else floor_number), Rect2(28, 49, 340, 24), 14, MUTED)
 	_button("指南 · F1", Rect2(340, 40, 120, 33), _open_guide)
 	pause_button = _button("暂停", Rect2(470, 42, 75, 30), _open_pause)
 	_label("第 %d 轮" % battle.round_number, Rect2(470, 12, 80, 24), 16, GOLD)
@@ -157,7 +167,7 @@ func _refresh() -> void:
 		_label(("▶ " if active else "") + name_text, Rect2(571 + i * stride, 28, slot_width - 12, 30), 13 if battle.order.size() == 5 else (16 if battle.order.size() == 4 else 18), GOLD if active else MUTED)
 	_button("返回主菜单", Rect2(1090, 22, 158, 40), _return_to_menu)
 	if flow == null or flow.run == null:
-		_button("单人演练" if party_practice else "双人演练", Rect2(1090, 90, 158, 36), _toggle_practice)
+		_button("演练配置", Rect2(730, 90, 250, 36), _open_training)
 	if not battle.scout.is_empty():
 		if not battle.ally.is_empty():
 			_unit("lorn", battle.hero, Rect2(30, 208, 175, 265), "res://Assets/Battle/lorn.png")
@@ -338,6 +348,8 @@ func _settle() -> void:
 	if flow != null:
 		flow.active_character = battle.hero.duplicate(true)
 		if flow.run != null: flow.settle_battle(battle.hero, battle.ally, battle.outcome == "victory", battle.scout)
+		elif not flow.training_config.is_empty():
+			preload("res://Scripts/Core/game_log.gd").event("training", "finished", {"config": flow.training_config.duplicate(true), "battle": battle.log_state(), "shared": flow.progress.data.duplicate(true)})
 
 func gm_recovery_reason(action: String) -> String:
 	if get_tree().paused: return "请先继续旅程"
@@ -733,6 +745,16 @@ func _open_quests() -> void:
 	add_child(board)
 	board.changed.connect(show_floor_map)
 	board.open(flow)
+
+func _open_training() -> void:
+	if flow == null or flow.run != null or busy or get_tree().paused: return
+	var gm := get_tree().get_first_node_in_group("gm_panel")
+	if gm != null and gm.is_open(): return
+	for child in get_children():
+		if child is Window and child.visible: return
+	var panel := preload("res://Scripts/UI/training_panel.gd").new()
+	add_child(panel)
+	panel.open(flow)
 
 func _toggle_practice() -> void:
 	if busy or (flow != null and flow.run != null): return
