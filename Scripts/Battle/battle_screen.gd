@@ -537,8 +537,9 @@ func _show_city() -> void:
 	city_buttons["rest"].disabled = hero.hp >= hero.max_hp and (not hero.party_enlisted or (not flow.party_companion().is_empty() and hero.party_hp >= flow.party_companion().max_hp)) and (not hero.scout_enlisted or (not flow.party_companion("scout").is_empty() and hero.scout_hp >= flow.party_companion("scout").max_hp))
 	city_buttons["potion"] = _button("购买治疗药水 ×1 · 3 金币", Rect2(496, 250, 720, 46), _city_service.bind("potion"))
 	city_buttons["potion"].disabled = hero.gold < 3
-	city_buttons["fire_potion"] = _button("购买灼烧药水 ×1 · 4 金币（战斗／绕行）", Rect2(496, 308, 720, 46), _city_service.bind("fire_potion"))
+	city_buttons["fire_potion"] = _button("灼烧药水 ×1 · 4 金币", Rect2(496, 308, 458, 46), _city_service.bind("fire_potion"))
 	city_buttons["fire_potion"].disabled = hero.gold < 4
+	city_buttons["commerce"] = _button("订单／补给", Rect2(966, 308, 250, 46), _open_commerce)
 	city_buttons["forge"] = _button("已持有铁剑" if hero.weapons.has("iron_sword") else "打造铁剑 · 6 金币 + 3 铁片", Rect2(496, 366, 458, 46), _city_service.bind("forge"), true)
 	city_buttons["forge"].disabled = not flow.forge_reason().is_empty()
 	city_buttons["equipment"] = _button("工坊／装备", Rect2(966, 366, 250, 46), _open_equipment)
@@ -567,6 +568,15 @@ func _open_station() -> void:
 	add_child(station)
 	station.changed.connect(show_floor_map)
 	station.open(flow)
+
+func _open_commerce() -> void:
+	if flow == null or flow.run == null or flow.run.phase != "city": return
+	for child in get_children():
+		if child is Window and child.visible: return
+	var board := preload("res://Scripts/UI/commerce_board.gd").new()
+	add_child(board)
+	board.changed.connect(show_floor_map)
+	board.open(flow)
 
 func _depart_city() -> void:
 	if flow.run.depart_city(randi()): show_floor_map()
@@ -687,5 +697,5 @@ func _party_status() -> String:
 	for id in ["squire", "scout"]:
 		var member: Dictionary = flow.party_companion(id)
 		if not member.is_empty(): result.append("%s Lv%d · HP %d/%d" % [member.name, member.level, member.hp, member.max_hp])
-	if flow.run.character.familia_id == "ember": return "炉心眷族 · 单人探索；转回晨行后可招募远征队友"
+	if not flow.run.character.familia_id.is_empty() and flow.run.character.familia_id != "dawn": return preload("res://Scripts/Character/familia_library.gd").name_for(flow.run.character.familia_id) + " · 单人探索；转回晨行后可招募远征队友"
 	return "单人探索 · 在城市眷族菜单招募队友" if result.is_empty() else "  /  ".join(result)

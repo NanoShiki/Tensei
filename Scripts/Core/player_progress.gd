@@ -2,7 +2,7 @@ extends RefCounted
 
 const Log = preload("res://Scripts/Core/game_log.gd")
 const VERSION := 1
-const CONTENT_VERSION := "demo-familia-3"
+const CONTENT_VERSION := "demo-familia-4"
 const BASE_HP := 28
 const HP_PER_LEVEL := 3
 const MAX_LEVEL := 5
@@ -16,16 +16,18 @@ var data: Dictionary = {}
 var message := ""
 
 static func initial() -> Dictionary:
-	return {"player_id": Crypto.new().generate_random_bytes(16).hex_encode(), "familias": {"dawn": {"contribution": 0, "squire_xp": 0, "scout_xp": 0, "events": {}}, "ember": {"contribution": 0, "events": {}}}}
+	return {"player_id": Crypto.new().generate_random_bytes(16).hex_encode(), "familias": {"dawn": {"contribution": 0, "squire_xp": 0, "scout_xp": 0, "events": {}}, "ember": {"contribution": 0, "events": {}}, "harbor": {"contribution": 0, "events": {}}}}
 
 static func valid(snapshot: Variant) -> bool:
 	if not snapshot is Dictionary or not snapshot.get("player_id") is String or not snapshot.get("familias") is Dictionary: return false
 	if snapshot.player_id.length() != 32 or not snapshot.player_id.is_valid_hex_number(false): return false
-	if snapshot.familias.size() != 2 or not snapshot.familias.get("dawn") is Dictionary or not snapshot.familias.get("ember") is Dictionary: return false
-	var workshop: Dictionary = snapshot.familias.ember
-	if not workshop.get("contribution") is int or not workshop.get("events") is Dictionary or workshop.contribution < 0 or workshop.contribution != workshop.events.size() or workshop.events.size() > 20000: return false
-	for id in workshop.events:
-		if not id is String or id.is_empty() or id.length() > 300 or typeof(workshop.events[id]) != TYPE_BOOL or not workshop.events[id]: return false
+	if snapshot.familias.size() != 3 or not snapshot.familias.get("dawn") is Dictionary: return false
+	for organization in ["ember", "harbor"]:
+		if not snapshot.familias.get(organization) is Dictionary: return false
+		var service: Dictionary = snapshot.familias[organization]
+		if not service.get("contribution") is int or not service.get("events") is Dictionary or service.contribution < 0 or service.contribution != service.events.size() or service.events.size() > 20000: return false
+		for id in service.events:
+			if not id is String or id.is_empty() or id.length() > 300 or typeof(service.events[id]) != TYPE_BOOL or not service.events[id]: return false
 	var guild: Dictionary = snapshot.familias.dawn
 	if not guild.get("contribution") is int or not guild.get("squire_xp") is int or not guild.get("scout_xp") is int or not guild.get("events") is Dictionary: return false
 	if guild.contribution < 0 or guild.events.size() > 20000 or guild.contribution != guild.events.size(): return false
@@ -67,15 +69,18 @@ func _read(path: String) -> Dictionary:
 	if file == null or file.get_length() > 8 * 1024 * 1024: return {"invalid": true}
 	var envelope: Variant = file.get_var(false)
 	if not envelope is Dictionary: return {"invalid": true}
-	if envelope.get("version") != VERSION or envelope.get("content_version") not in [CONTENT_VERSION, "demo-familia-2", "demo-familia-1"]: return {"incompatible": true}
+	if envelope.get("version") != VERSION or envelope.get("content_version") not in [CONTENT_VERSION, "demo-familia-3", "demo-familia-2", "demo-familia-1"]: return {"incompatible": true}
 	if not envelope.get("generation") is int or envelope.generation < 1: return {"invalid": true}
 	if not envelope.get("payload") is PackedByteArray or not envelope.get("checksum") is String: return {"invalid": true}
 	if _checksum(envelope.payload) != envelope.checksum: return {"invalid": true}
 	var snapshot: Variant = bytes_to_var(envelope.payload)
 	if envelope.content_version != CONTENT_VERSION:
-		if not snapshot is Dictionary or not snapshot.get("familias") is Dictionary or snapshot.familias.size() != 1 or not snapshot.familias.has("dawn"): return {"invalid": true}
+		if not snapshot is Dictionary or not snapshot.get("familias") is Dictionary or not snapshot.familias.has("dawn"): return {"invalid": true}
+		var expected: int = 2 if envelope.content_version == "demo-familia-3" else 1
+		if snapshot.familias.size() != expected or (expected == 2 and not snapshot.familias.has("ember")): return {"invalid": true}
 	if envelope.content_version == "demo-familia-1": snapshot = migrate_legacy(snapshot)
-	if envelope.content_version != CONTENT_VERSION and snapshot is Dictionary: snapshot.familias.ember = {"contribution": 0, "events": {}}
+	if envelope.content_version in ["demo-familia-1", "demo-familia-2"] and snapshot is Dictionary: snapshot.familias.ember = {"contribution": 0, "events": {}}
+	if envelope.content_version != CONTENT_VERSION and snapshot is Dictionary: snapshot.familias.harbor = {"contribution": 0, "events": {}}
 	if not valid(snapshot): return {"invalid": true}
 	return {"generation": envelope.generation, "data": snapshot, "path": path}
 
@@ -179,25 +184,39 @@ static func valid_forge_event(event_id: Variant) -> bool:
 	return parts.size() == 4 and parts[0] == "profile" and (parts[1] == "legacy" or (parts[1].length() == 32 and parts[1].is_valid_hex_number(false))) and parts[2] == "forge" and parts[3] in ["iron_sword", "tempered_sword"]
 
 func award_forge(event_id: String, player_id: String) -> bool:
+	return _award_service("ember", event_id, player_id, valid_forge_event(event_id))
+
+static func commerce_event(profile_id: String, order_id: String) -> String:
+	return "profile/" + profile_id + "/commerce/" + order_id
+
+static func valid_commerce_event(event_id: Variant) -> bool:
+	if not event_id is String: return false
+	var parts: PackedStringArray = event_id.split("/")
+	return parts.size() == 4 and parts[0] == "profile" and (parts[1] == "legacy" or (parts[1].length() == 32 and parts[1].is_valid_hex_number(false))) and parts[2] == "commerce" and parts[3] in ["supply_order", "member_bundle"]
+
+func award_commerce(event_id: String, player_id: String) -> bool:
+	return _award_service("harbor", event_id, player_id, valid_commerce_event(event_id))
+
+func _award_service(organization: String, event_id: String, player_id: String, valid_event: bool) -> bool:
 	var previous := inspect()
 	var before: Dictionary = previous.get("data", {}).duplicate(true)
 	var success := false
 	var duplicate := false
 	if previous.is_empty() or before.get("player_id") != player_id:
-		if message.is_empty(): message = "共享档案缺失或归属不符，锻造贡献等待重试。"
-	elif not valid_forge_event(event_id): message = "锻造贡献事件无效。"
+		if message.is_empty(): message = "共享档案缺失或归属不符，专业贡献等待重试。"
+	elif not valid_event: message = "专业贡献事件无效。"
 	else:
 		var candidate := before.duplicate(true)
-		if candidate.familias.ember.events.has(event_id):
+		if candidate.familias[organization].events.has(event_id):
 			data = before.duplicate(true)
 			message = ""
 			duplicate = true
 			success = true
 		else:
-			candidate.familias.ember.events[event_id] = true
-			candidate.familias.ember.contribution += 1
+			candidate.familias[organization].events[event_id] = true
+			candidate.familias[organization].contribution += 1
 			success = _commit(candidate, previous)
-	Log.event("workshop", "contribution", {"id": event_id, "success": success, "duplicate": duplicate, "reason": message, "before": before, "after": data.duplicate(true)}, "INFO" if success else "ERROR")
+	Log.event("workshop" if organization == "ember" else "commerce", "contribution", {"id": event_id, "organization": organization, "success": success, "duplicate": duplicate, "reason": message, "before": before, "after": data.duplicate(true)}, "INFO" if success else "ERROR")
 	return success
 
 static func valid_hp_limit(hp: int, id: String = "squire") -> bool:

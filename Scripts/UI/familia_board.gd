@@ -87,12 +87,15 @@ func _refresh() -> void:
 		var level: int = flow.guild_level()
 		_text("炉心等级 %d · 贡献 %d\n晨行成员巡守暂停推进和交付，转回晨行后从原进度继续。" % [level, flow.progress.data.get("familias", {}).get("ember", {}).get("contribution", 0)] if level > 0 else "炉心共享档案不可用，请恢复同一玩家备份。")
 	if not hero.player_id.is_empty():
-		_button("retry", "同步待提交成长／锻造 · %d 条" % (hero.growth_pending.size() + hero.forge_pending.size()), hero.growth_pending.is_empty() and hero.forge_pending.is_empty())
+		_button("retry", "同步待提交成长／专业贡献 · %d 条" % (hero.growth_pending.size() + hero.forge_pending.size() + hero.commerce_pending.size()), hero.growth_pending.is_empty() and hero.forge_pending.is_empty() and hero.commerce_pending.is_empty())
+	_text("集市眷族 · 订单与补给\n加入资格：完成铁片供货订单。当前：" + ("已达成" if Familias.qualified(hero, "harbor") else "未达成") + "\n" + flow.commerce_status() + "\n会员可购买一次补给礼包；当前不提供远征队友。")
+	_button("join_harbor", "已加入集市眷族" if hero.familia_id == "harbor" else ("加入集市眷族" if hero.familia_id.is_empty() else "转入集市眷族 · 免费"), hero.familia_id == "harbor" or not Familias.qualified(hero, "harbor"))
+	if hero.familia_id == "harbor": _text("晨行巡守在集市暂停；转回晨行可继续原进度。个人武器、职业、任务与各组织成长保留。")
 	feedback.text = "眷族与队友成长自动写入共享档案；角色归属、编队和当前生命需手动保存。最多三人和免费招募为 Demo 规则。"
 
 func _act(action: String) -> void:
-	if action in ["join", "join_ember"] and not flow.run.character.familia_id.is_empty():
-		var target := "dawn" if action == "join" else "ember"
+	if action in ["join", "join_ember", "join_harbor"] and not flow.run.character.familia_id.is_empty():
+		var target: String = {"join": "dawn", "join_ember": "ember", "join_harbor": "harbor"}[action]
 		if target != flow.run.character.familia_id:
 			_confirm_transfer(action, target)
 			return

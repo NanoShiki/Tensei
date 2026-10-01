@@ -5,6 +5,7 @@ const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 const FloorRun = preload("res://Scripts/Exploration/floor_run.gd")
 const Familias = preload("res://Scripts/Character/familia_library.gd")
 const Weapons = preload("res://Scripts/Character/weapon_library.gd")
+const Commerce = preload("res://Scripts/Character/commerce_library.gd")
 const MENU_SCENE := "res://Scenes/UI/main_menu.tscn"
 const BATTLE_SCENE := "res://Scenes/Battle/battle.tscn"
 var active_character: Dictionary = {}
@@ -35,6 +36,11 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 			saves.message = "无法读取：锻造贡献不属于此角色档案。"
 			Log.event("flow", "load_rejected", {"profile_id": profile_id, "record_id": record_id, "reason": saves.message}, "WARN")
 			return false
+	for event in candidate.commerce_pending:
+		if event != progress.commerce_event(profile_id, event.get_slice("/", 3)):
+			saves.message = "无法读取：商贸贡献不属于此角色档案。"
+			Log.event("flow", "load_rejected", {"profile_id": profile_id, "record_id": record_id, "reason": saves.message}, "WARN")
+			return false
 	saved = saves.load_record(profile_id, record_id)
 	if saved.is_empty(): return false
 	run = saved.run
@@ -50,7 +56,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-station-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-commerce-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -101,8 +107,8 @@ func familia_service(action: String) -> bool:
 	var success := false
 	familia_message = ""
 	if run.phase != "city" or not run.pending.is_empty(): familia_message = "请在城市整备时调整编队。"
-	elif action in ["join", "join_ember"]:
-		success = _join_familia("dawn" if action == "join" else "ember")
+	elif action in ["join", "join_ember", "join_harbor"]:
+		success = _join_familia({"join": "dawn", "join_ember": "ember", "join_harbor": "harbor"}[action])
 	elif hero.player_id.is_empty() or not progress.refresh() or progress.data.get("player_id") != hero.player_id:
 		familia_message = "共享档案不可用或归属不符，请恢复备份。" + progress.message
 	elif action == "retry":
@@ -133,6 +139,7 @@ func familia_service(action: String) -> bool:
 		success = true
 		familia_message = "游侠已留在城市，共享成长保留。"
 	else: familia_message = "当前操作条件不满足。"
+	if success: active_character = hero.duplicate(true)
 	Log.context["run_id"] = run.run_id
 	Log.event("familia", "service", {"action": action, "success": success, "reason": familia_message, "before": before, "after": run.log_state(), "shared_before": shared_before, "shared_after": progress.data.duplicate(true)}, "INFO" if success else "WARN")
 	return success
@@ -142,7 +149,7 @@ func _join_familia(target: String) -> bool:
 	if hero.familia_id == target: familia_message = "已加入此眷族。"
 	elif not Familias.qualified(hero, target): familia_message = "加入资格：" + str(Familias.ENTRIES[target].qualification) + "。"
 	elif hero.hp <= 0: familia_message = "请先在旅店恢复主角，再调整眷族归属。"
-	elif not hero.growth_pending.is_empty() or not hero.forge_pending.is_empty(): familia_message = "请先同步待提交成长与锻造贡献，再转会。"
+	elif not hero.growth_pending.is_empty() or not hero.forge_pending.is_empty() or not hero.commerce_pending.is_empty(): familia_message = "请先同步待提交成长与专业贡献，再转会。"
 	elif hero.player_id.is_empty() and not progress.ensure(): familia_message = progress.message
 	elif not hero.player_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != hero.player_id): familia_message = "共享档案不可用或归属不符，请恢复备份。"
 	else:
@@ -159,17 +166,33 @@ func _join_familia(target: String) -> bool:
 
 func retry_growth() -> bool:
 	if run == null: return true
-	var forge_ok := retry_forge()
-	var forge_message: String = progress.message
-	if run.character.growth_pending.is_empty(): return forge_ok
-	var before: Array = run.character.growth_pending.duplicate()
+	if run.character.growth_pending.is_empty() and run.character.forge_pending.is_empty() and run.character.commerce_pending.is_empty(): return true
+	var reasons := PackedStringArray()
+	if not retry_forge(): reasons.append(progress.message)
+	if not retry_commerce(): reasons.append(progress.message)
+	if not run.character.growth_pending.is_empty():
+		var before: Array = run.character.growth_pending.duplicate()
+		for event in before:
+			if not progress.award_victory(event.id, run.character.player_id, event.members): break
+			run.character.growth_pending.erase(event)
+		var success: bool = run.character.growth_pending.is_empty()
+		if not success: reasons.append(progress.message)
+		Log.event("familia", "sync", {"success": success, "before": before, "after": run.character.growth_pending.duplicate(), "reason": progress.message}, "INFO" if success else "WARN")
+	progress.message = " ".join(reasons)
+	return reasons.is_empty()
+
+func retry_commerce() -> bool:
+	if run == null or run.character.commerce_pending.is_empty(): return true
+	var before: Array = run.character.commerce_pending.duplicate()
 	for event in before:
-		if not progress.award_victory(event.id, run.character.player_id, event.members): break
-		run.character.growth_pending.erase(event)
-	var success: bool = run.character.growth_pending.is_empty()
-	if not forge_ok and success: progress.message = forge_message
-	Log.event("familia", "sync", {"success": success, "before": before, "after": run.character.growth_pending.duplicate(), "reason": progress.message}, "INFO" if success else "WARN")
-	return success and forge_ok
+		if event != progress.commerce_event(profile.get("id", ""), event.get_slice("/", 3)):
+			progress.message = "商贸贡献不属于当前角色档案。"
+			break
+		if not progress.award_commerce(event, run.character.player_id): break
+		run.character.commerce_pending.erase(event)
+	var success: bool = run.character.commerce_pending.is_empty()
+	Log.event("commerce", "sync", {"success": success, "before": before, "after": run.character.commerce_pending.duplicate(), "reason": progress.message}, "INFO" if success else "WARN")
+	return success
 
 func retry_forge() -> bool:
 	if run == null or run.character.forge_pending.is_empty(): return true
@@ -270,6 +293,39 @@ func _forge_service(recipe_id: String) -> bool:
 func guild_level() -> int:
 	if run == null or run.character.familia_id.is_empty() or not progress.refresh() or progress.data.get("player_id") != run.character.player_id: return 0
 	return progress.guild_level(run.character.familia_id)
+
+func commerce_reason(id: String) -> String:
+	if run == null or run.phase != "city" or not run.pending.is_empty(): return "请在城市交付订单。"
+	return Commerce.reason(run.character, id, guild_level() if id == "member_bundle" else 0)
+
+func commerce_service(id: String) -> bool:
+	if run == null: return false
+	var before: Dictionary = run.log_state()
+	var success := false
+	var event_id: String = progress.commerce_event(profile.get("id", ""), id)
+	var hero: Dictionary = run.character
+	var reason := commerce_reason(id)
+	if not reason.is_empty(): run.message = reason
+	elif not progress.valid_commerce_event(event_id): run.message = "角色或订单身份无效。"
+	elif hero.player_id.is_empty() and not progress.ensure(): run.message = progress.message
+	elif not hero.player_id.is_empty() and (not progress.refresh() or progress.data.get("player_id") != hero.player_id): run.message = "共享档案不可用或归属不符，请恢复备份。"
+	else:
+		if run.commerce_service(id, progress.guild_level("harbor")):
+			hero.player_id = progress.data.player_id
+			hero.commerce_pending.append(event_id)
+			success = true
+			if retry_commerce(): run.message += " 集市贡献已同步（同角色同订单只计一次）。"
+			else: run.message += " 集市贡献待同步，请保存当前记录并恢复存储后重试。"
+			active_character = hero.duplicate(true)
+	Log.event("commerce", "exchange", {"id": id, "event_id": event_id, "success": success, "reason": run.message, "harbor_level": progress.guild_level("harbor") if not progress.data.is_empty() else 0, "player_id": progress.data.get("player_id", ""), "before": before, "after": run.log_state()}, "INFO" if success else "WARN")
+	return success
+
+func commerce_status() -> String:
+	if run == null: return ""
+	var hero: Dictionary = run.character
+	if hero.player_id.is_empty(): return "集市眷族：供货订单对所有归属开放；实际交付贡献 +1，同角色同订单只计一次。"
+	if not progress.refresh() or progress.data.get("player_id") != hero.player_id: return "集市共享档案不可用，请恢复同一玩家备份。"
+	return "集市等级 %d · 贡献 %d · 待同步 %d；同角色同订单只计一次。" % [progress.guild_level("harbor"), progress.data.familias.harbor.contribution, hero.commerce_pending.size()]
 
 func workshop_status() -> String:
 	if run == null: return ""
