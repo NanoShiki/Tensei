@@ -663,4 +663,5 @@ func _party_status() -> String:
 	for id in ["squire", "scout"]:
 		var member: Dictionary = flow.party_companion(id)
 		if not member.is_empty(): result.append("%s Lv%d · HP %d/%d" % [member.name, member.level, member.hp, member.max_hp])
+	if flow.run.character.familia_id == "ember": return "炉心眷族 · 单人探索；转回晨行后可招募远征队友"
 	return "单人探索 · 在城市眷族菜单招募队友" if result.is_empty() else "  /  ".join(result)

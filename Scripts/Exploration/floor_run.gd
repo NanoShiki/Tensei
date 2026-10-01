@@ -6,6 +6,7 @@ const CharacterLibrary = preload("res://Scripts/Character/character_library.gd")
 const Jobs = preload("res://Scripts/Character/job_library.gd")
 const PlayerProgress = preload("res://Scripts/Core/player_progress.gd")
 const Enemies = preload("res://Scripts/Battle/enemy_library.gd")
+const Familias = preload("res://Scripts/Character/familia_library.gd")
 var floor_number := 1
 var total_floors := 30
 var seed_value := 1
@@ -421,14 +422,15 @@ static func from_save(data: Variant) -> RefCounted:
 	if data.character.quests.depth_five == "claimed" and data.character.depth_goal != 5: return null
 	if data.character.familia_wins < 0 or data.character.familia_wins > 5: return null
 	if data.character.quests.familia_patrol == "available" and data.character.familia_wins != 0: return null
-	if data.character.quests.familia_patrol != "available" and data.character.familia_id != "dawn": return null
+	if data.character.quests.familia_patrol != "available" and (data.character.familia_id.is_empty() or data.character.quests.get("hunt") != "claimed"): return null
 	if data.character.quests.familia_patrol == "claimed" and data.character.familia_wins != 5: return null
 	if not Jobs.ENTRIES.has(data.character.job_id): return null
 	for key in ["ac", "attack", "dex"]:
 		if data.character[key] != Jobs.resolve(data.character)[key]: return null
 	if data.character.id != "lorn" or data.character.max_hp <= 0 or data.character.hp < 0 or data.character.hp > data.character.max_hp: return null
 	var owner: String = data.character.player_id
-	if data.character.familia_id not in ["", "dawn"]: return null
+	if not data.character.familia_id.is_empty() and not Familias.ENTRIES.has(data.character.familia_id): return null
+	if data.character.familia_id != "dawn" and (data.character.party_enlisted or data.character.scout_enlisted): return null
 	if data.character.familia_id.is_empty():
 		if not owner.is_empty() or data.character.party_enlisted or data.character.scout_enlisted or not data.character.growth_pending.is_empty(): return null
 	elif owner.length() != 32 or not owner.is_valid_hex_number(false): return null
