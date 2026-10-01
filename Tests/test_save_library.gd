@@ -197,8 +197,8 @@ func _run() -> void:
 	flow.saves.base_path = base + "-blocked"
 	current_scene._request_save_exit()
 	window = browser()
-	window.save_button.pressed.emit()
-	check(current_scene.map_visible and window.feedback.text.contains("保存失败"), "保存失败留在当前地图和窗口")
+	window.continue_save_button.pressed.emit()
+	check(current_scene.map_visible and window.feedback.text.contains("保存失败") and not window.save_button.disabled and not window.continue_save_button.disabled, "保存继续失败留在当前地图和窗口，两种重试入口恢复")
 	window.close_requested.emit()
 	await frames()
 	flow.saves.base_path = base + "-ui"

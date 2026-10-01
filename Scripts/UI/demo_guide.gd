@@ -32,7 +32,7 @@ func open(expedition: RefCounted = null, guild_level: int = 0) -> void:
 		summary.text = "%s\n当前等级 %d · 经验 %d / 85 · 第 %d 层" % [expedition.objective_text(), expedition.character.level, expedition.character.experience, expedition.floor_number]
 	for item in stages(expedition, guild_level):
 		stage_labels[item.id] = _text(item.title + " · " + item.status + "\n" + item.text, rows)
-	_text("战斗：先选技能，再点高亮目标；空格结束回合，右键／Esc 取消选择。B 打开地图背包。\n路线：可随时切换深入／返回，沿合法分支选路；实际移动才扣刷新步数，未知节点靠近后揭示。\n保存：地图和城市手动“保存并退出”，同一角色可保留多个时点。关闭游戏和回城不自动保存。读取旧个人记录恢复旧进度，共享队友成长保持最新。\n测试：右上 GM 可秒杀、恢复存活成员和补药。测试修改会进入手动存档。", rows)
+	_text("战斗：先选技能，再点高亮目标；空格结束回合，右键／Esc 取消选择。B 打开地图背包。\n路线：可随时切换深入／返回，沿合法分支选路；实际移动才扣刷新步数，未知节点靠近后揭示。\n保存：地图和城市手动“保存记录”，可选择保存后继续或退出，同一角色可保留多个时点。关闭游戏和回城不自动保存。读取旧个人记录恢复旧进度，共享队友成长保持最新。\n测试：右上 GM 可秒杀、恢复存活成员和补药。测试修改会进入手动存档。", rows)
 	var close := Button.new()
 	close.text = "关闭 · Esc / F1"
 	close.custom_minimum_size.y = 38
