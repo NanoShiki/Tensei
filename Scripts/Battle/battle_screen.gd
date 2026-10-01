@@ -166,6 +166,7 @@ func _refresh() -> void:
 		_panel(Rect2(565 + i * stride, 16, slot_width, 53), Color("29372e") if active else Color("19262b"), GOLD if active else Color("3c4948"))
 		_label(("▶ " if active else "") + name_text, Rect2(571 + i * stride, 28, slot_width - 12, 30), 13 if battle.order.size() == 5 else (16 if battle.order.size() == 4 else 18), GOLD if active else MUTED)
 	_button("返回主菜单", Rect2(1090, 22, 158, 40), _return_to_menu)
+	_button("战斗记录", Rect2(570, 90, 145, 36), _open_battle_history)
 	if flow == null or flow.run == null:
 		_button("演练配置", Rect2(730, 90, 250, 36), _open_training)
 	if not battle.scout.is_empty():
@@ -752,6 +753,54 @@ func _open_quests() -> void:
 	add_child(board)
 	board.changed.connect(show_floor_map)
 	board.open(flow)
+
+func _open_battle_history() -> Window:
+	if map_visible or battle == null or busy or get_tree().paused: return null
+	var gm := get_tree().get_first_node_in_group("gm_panel")
+	if gm != null and gm.is_open(): return null
+	for child in get_children():
+		if child is Window and child.visible: return null
+	var history := Window.new()
+	history.title = "当前战斗记录"
+	history.transient = true
+	history.exclusive = true
+	history.unresizable = true
+	history.close_requested.connect(history.queue_free)
+	add_child(history)
+	var margin := MarginContainer.new()
+	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 16)
+	history.add_child(margin)
+	var box := VBoxContainer.new()
+	margin.add_child(box)
+	var heading := Label.new()
+	heading.text = "当前战斗最近 200 条：先攻、技能与结算；完整诊断见 GM 日志目录。"
+	heading.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(heading)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	var lines := Label.new()
+	lines.text = "\n".join(battle.logs.slice(maxi(0, battle.logs.size() - 200)))
+	lines.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	lines.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lines.add_theme_font_size_override("font_size", 18)
+	scroll.add_child(lines)
+	history.set_meta("history_lines", lines)
+	var close := Button.new()
+	close.text = "关闭 · Esc"
+	close.custom_minimum_size.y = 38
+	close.pressed.connect(history.queue_free)
+	box.add_child(close)
+	history.window_input.connect(func(event: InputEvent):
+		if event.is_action_pressed("ui_cancel"):
+			history.set_input_as_handled()
+			history.queue_free())
+	history.popup_centered(Vector2i(740, 470))
+	close.grab_focus()
+	preload("res://Scripts/Core/game_log.gd").event("ui", "battle_history_open", {"battle_id": battle.battle_id, "count": mini(200, battle.logs.size())})
+	return history
 
 func _open_training() -> void:
 	if flow == null or flow.run != null or busy or get_tree().paused: return
