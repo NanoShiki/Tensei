@@ -39,6 +39,21 @@ def inspect(paths):
             if row["level"] == "ERROR":
                 errors.append(label + ": " + str(row["data"].get("message", row["data"])))
             data = row["data"]
+            if row["category"] == "trade" and row["event"] == "service":
+                try:
+                    old, new = data["before"], data["after"]
+                    expected = json.loads(json.dumps(old))
+                    expected["message"] = new["message"]
+                    if data["success"]:
+                        assert old["phase"] == "city" and not old["pending"] and 1 <= data["quantity"] <= 99, "bulk trade prerequisites"
+                        resource, price, direction = {"potion": ("potions", 3, 1), "fire_potion": ("fire_potions", 4, 1), "sell_scrap": ("scrap", 1, -1)}[data["id"]]
+                        amount = data["quantity"]
+                        expected["hero"]["gold"] -= direction * amount * price
+                        expected["hero"][resource] += direction * amount
+                        assert expected["hero"]["gold"] >= 0 and expected["hero"][resource] >= 0, "bulk trade insufficient funds or stock"
+                    assert expected == new, "bulk trade changed unrelated progress or clock"
+                except (KeyError, TypeError, AssertionError) as exc:
+                    errors.append(label + ": " + str(exc))
             if row["category"] == "pause" and row["event"] in ("resume", "menu", "closed"):
                 if data.get("before") != data.get("after"):
                     errors.append(label + ": pause changed gameplay or RNG")

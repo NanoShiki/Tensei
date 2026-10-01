@@ -56,7 +56,7 @@ func load_exploration(profile_id: String, record_id: String) -> bool:
 	return true
 
 func _ready() -> void:
-	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-pause-1", "platform": OS.get_name()})
+	Log.event("session", "start", {"engine": Engine.get_version_info().string, "build": "demo-trade-1", "platform": OS.get_name()})
 	print("诊断日志目录：", ProjectSettings.globalize_path(Log.directory))
 	var gm = preload("res://Scripts/Debug/gm_panel.gd").new()
 	add_child(gm)
@@ -297,6 +297,12 @@ func guild_level() -> int:
 func commerce_reason(id: String) -> String:
 	if run == null or run.phase != "city" or not run.pending.is_empty(): return "请在城市交付订单。"
 	return Commerce.reason(run.character, id, guild_level() if id == "member_bundle" else 0)
+
+func trade_service(id: String, quantity: int) -> bool:
+	if run == null or get_tree().paused: return false
+	var success: bool = run.city_trade(id, quantity)
+	if success: active_character = run.character.duplicate(true)
+	return success
 
 func commerce_service(id: String) -> bool:
 	if run == null: return false

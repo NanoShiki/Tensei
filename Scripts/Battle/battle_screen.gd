@@ -550,7 +550,8 @@ func _show_city() -> void:
 	_label("休整与工坊", Rect2(496, 137, 700, 40), 24, GOLD)
 	city_buttons["rest"] = _button("旅店休整 · 免费恢复全部生命", Rect2(496, 192, 720, 46), _city_service.bind("rest"))
 	city_buttons["rest"].disabled = hero.hp >= hero.max_hp and (not hero.party_enlisted or (not flow.party_companion().is_empty() and hero.party_hp >= flow.party_companion().max_hp)) and (not hero.scout_enlisted or (not flow.party_companion("scout").is_empty() and hero.scout_hp >= flow.party_companion("scout").max_hp))
-	city_buttons["potion"] = _button("购买治疗药水 ×1 · 3 金币", Rect2(496, 250, 720, 46), _city_service.bind("potion"))
+	city_buttons["potion"] = _button("购买治疗药水 ×1 · 3 金币", Rect2(496, 250, 458, 46), _city_service.bind("potion"))
+	city_buttons["trade"] = _button("批量补给／出售", Rect2(966, 250, 250, 46), _open_trade)
 	city_buttons["potion"].disabled = hero.gold < 3
 	city_buttons["fire_potion"] = _button("灼烧药水 ×1 · 4 金币", Rect2(496, 308, 458, 46), _city_service.bind("fire_potion"))
 	city_buttons["fire_potion"].disabled = hero.gold < 4
@@ -592,6 +593,13 @@ func _open_commerce() -> void:
 	add_child(board)
 	board.changed.connect(show_floor_map)
 	board.open(flow)
+
+func _open_trade() -> void:
+	if not _can_open_city_board(): return
+	var panel := preload("res://Scripts/UI/trade_panel.gd").new()
+	add_child(panel)
+	panel.changed.connect(show_floor_map)
+	panel.open(flow)
 
 func _depart_city() -> void:
 	if flow.run.depart_city(randi()): show_floor_map()
