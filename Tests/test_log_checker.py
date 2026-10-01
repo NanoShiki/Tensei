@@ -8,6 +8,20 @@ inspect = runpy.run_path(str(Path(__file__).resolve().parents[1] / "Tools/check_
 
 
 class LogCheckerTests(unittest.TestCase):
+    def test_bulk_sale_consumes_full_quantity_and_keeps_clock(self):
+        old = {"phase": "city", "pending": "", "steps": 7, "message": "old", "hero": {"gold": 2, "scrap": 5, "familia_id": "dawn"}}
+        new = json.loads(json.dumps(old))
+        new["hero"].update(gold=5, scrap=2)
+        row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "trade", "event": "service",
+               "data": {"id": "sell_scrap", "quantity": 3, "success": True, "before": old, "after": new}}
+        with tempfile.TemporaryDirectory(prefix="tensei-checker-") as directory:
+            path = Path(directory) / "events-test.jsonl"
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertEqual(inspect([path])[1], [])
+            new["hero"]["scrap"] = 3
+            path.write_text(json.dumps(row), encoding="utf-8")
+            self.assertIn("bulk trade changed unrelated progress or clock", inspect([path])[1][0])
+
     def test_pause_keeps_actions_resources_and_rng(self):
         state = {"scope": "battle", "rng": "123", "busy": True, "battle": {"actions": 0, "hero": {"hp": 20, "potions": 2}}}
         row = {"schema": 1, "session": "test", "sequence": 1, "level": "INFO", "category": "pause", "event": "resume",

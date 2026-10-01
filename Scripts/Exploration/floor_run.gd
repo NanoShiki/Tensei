@@ -9,6 +9,7 @@ const Enemies = preload("res://Scripts/Battle/enemy_library.gd")
 const Familias = preload("res://Scripts/Character/familia_library.gd")
 const Weapons = preload("res://Scripts/Character/weapon_library.gd")
 const Commerce = preload("res://Scripts/Character/commerce_library.gd")
+const Trades = preload("res://Scripts/Character/trade_library.gd")
 var floor_number := 1
 var total_floors := 30
 var seed_value := 1
@@ -391,6 +392,23 @@ func equip_weapon(id: String) -> bool:
 		message = "已装备%s，物理伤害 +%d；装备选择请手动保存。" % [Weapons.ENTRIES[id].name, Weapons.ENTRIES[id].bonus]
 	Log.event("inventory", "equip", {"id": id, "success": success, "before": before, "after": log_state()}, "INFO" if success else "WARN")
 	return success
+
+func trade_reason(id: String, quantity: int) -> String:
+	if phase != "city" or not pending.is_empty() or failed: return "请在城市安全状态下交易。"
+	return Trades.reason(character, id, quantity)
+
+func city_trade(id: String, quantity: int) -> bool:
+	var before := log_state()
+	var reason := trade_reason(id, quantity)
+	if reason.is_empty():
+		var trade: Dictionary = Trades.ENTRIES[id]
+		var direction := 1 if trade.buy else -1
+		character.gold -= direction * quantity * trade.price
+		character[trade.resource] += direction * quantity
+		message = ("购入%s ×%d，支付 %d 金币。" if trade.buy else "出售%s ×%d，获得 %d 金币。") % [trade.name, quantity, quantity * trade.price]
+	else: message = reason
+	Log.event("trade", "service", {"id": id, "quantity": quantity, "success": reason.is_empty(), "reason": message, "before": before, "after": log_state()}, "INFO" if reason.is_empty() else "WARN")
+	return reason.is_empty()
 
 func station_reason(action: String, companion_max_hp: int = 0, scout_max_hp: int = 0) -> String:
 	if phase not in ["descending", "returning"] or floor_number != 5 or current != "entry" or not pending.is_empty() or failed or not has_living_party(): return "请在第五层入口、战斗结束后使用休整站。"
